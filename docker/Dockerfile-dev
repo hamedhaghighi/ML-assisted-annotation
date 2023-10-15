@@ -1,0 +1,16 @@
+FROM continuumio/miniconda3
+RUN apt-get update
+RUN apt-get -y update && apt-get -y upgrade && apt-get install -y --no-install-recommends ffmpeg
+RUN apt-get install libsm6 libxext6 -y
+RUN apt-get install -y gnupg2
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list
+RUN apt-get update && apt-get -y install google-chrome-stable
+WORKDIR ./app
+# RUN apt install libffi-dev
+COPY .. .
+RUN conda env create -f environment.yml
+SHELL ["conda", "run", "-n", "mlada", "/bin/bash", "-c"]
+RUN conda install -c anaconda pyqt
+RUN conda install pytorch torchvision -c pytorch
+# ENTRYPOINT ["conda", "run", "-n", "mlada", "python", "ML-ADA.py"]
