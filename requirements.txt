@@ -1,0 +1,9 @@
+matplotlib
+numpy
+nuscenes_devkit
+Pillow
+scikit-image
+tqdm
+wget
+jupyter
+tensorboard

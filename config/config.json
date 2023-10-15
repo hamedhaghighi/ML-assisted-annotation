@@ -1,0 +1,22 @@
+{
+"model_name": "yolov3-coco", 
+"data_dir": "./data/kitti_tiny/training", 
+"data_format": "kitti", 
+"labels": ["Car","Truck", "Pedestrian"],
+"labels_to_classes": ["car", "truck", "person"],
+"annotation_tool":"cvat",
+"iou_thres": 0.5, 
+"conf_thres": 0.8, 
+"nms_thres": 0.4, 
+"epochs": 3, 
+"batch_size": 8, 
+"subset_size": 25,
+"performance_thres": 0.7,
+"img_size": 416,
+"checkpoint_dir": "checkpoints",
+"query_mode": "random",
+"exp_name": "test",
+"use_cuda": false,
+"background_training": false,
+"n_cpu": 1
+}
