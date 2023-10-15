@@ -1,0 +1,2 @@
+train=../PyTorch-YOLOv3-kitti/data/Original_kitti/train.txt
+valid=../PyTorch-YOLOv3-kitti/val.txt

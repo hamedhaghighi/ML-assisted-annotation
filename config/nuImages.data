@@ -1,0 +1,3 @@
+classes=6
+train=data/nuImage/
+names=config/nuImage.names
