@@ -119,7 +119,7 @@ class AnnotationToolkit:
                         if self.opt.data_format == 'kitti':
                             root_files = os.path.join(root_files, 'image_2')
                         self.print_msg('Uploading image dataset to the task ...')
-                        task_data = models.DataRequest(image_quality=75, client_files=[open(img_path, 'rb') for img_path in list(glob(os.path.join(root_files, '*.jpeg')))],)
+                        task_data = models.DataRequest(image_quality=75, client_files=[open(img_path, 'rb') for img_path in list(glob(os.path.join(root_files, '*')))],)
                         self.try_func(api_client.tasks_api.create_data, id=task.id, data_request=task_data, _content_type="multipart/form-data", _check_status=False, _parse_response=False)
                         self.print_msg('Image dataset is uploaded successfully.')
 

@@ -420,7 +420,6 @@ class MLADA(*inhertance_classes):
         self.training_iteration += 1
         training_model.save_weights("%s/best.weights" % (self.opt.checkpoint_dir))
         self.training_model = training_model
-
         return losses_list
 
     def fine_tune(self):

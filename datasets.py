@@ -235,9 +235,12 @@ def get_bbox_class(ann, data_format):
 
 
 class Image2DAnnotationDataset(Dataset):
+    img_extension = ''
     def __init__(self, root_dir, filter_lables, labels_to_classes, data_format, img_size=416, resize_tuple=None, img_root_dir=None, labelled_filenames=None, parent=None):
         self.root_dir = root_dir
         self.images_path, self.labels_path = get_image_labels_path(root_dir, data_format)
+        if Image2DAnnotationDataset.img_extension == '':
+            Image2DAnnotationDataset.img_extension = self.images_path[0].split('.')[-1]
         if len(self.images_path) == 0 and parent is not None:
             parent.exit_(1, f'No data found in {root_dir}')
         self.sep = os.path.sep
@@ -267,10 +270,11 @@ class Image2DAnnotationDataset(Dataset):
                 label_path = self.labels_path[index].rstrip()
         if self.img_root_dir is not None:
             if self.data_format == 'kitti':
-                img_name = label_path.split(self.sep)[-1].replace('txt', 'jpeg')
+                img_name = label_path.split(self.sep)[-1].replace('txt', Image2DAnnotationDataset.img_extension)
+                
                 im_path = os.path.join(self.img_root_dir, 'image_2', img_name)
             elif self.data_format == 'openlabel':
-                label_file_name = label_path[list(label_path.keys())[0]]['file'].replace('txt', 'jpeg')
+                label_file_name = label_path[list(label_path.keys())[0]]['file'].replace('txt', Image2DAnnotationDataset.img_extension)
                 im_path = os.path.join(self.img_root_dir, 'image_2', label_file_name)
         else:
             im_path = self.images_path[index].rstrip()
