@@ -53,11 +53,17 @@ class MargParse():
         self.iou_thres = 0.5
         self.conf_thres = 0.8
         self.nms_thres = 0.4
-        self.use_api = True
         self.checkpoint_dir = 'checkpoints'
         for k, v in opt.items():
             setattr(self, k, v)
-        
+        if self.annotation_tool == 'cvat_api':
+            self.annotation_tool = 'cvat'
+            self.use_api = True
+        elif self.annotation_tool == 'cvat_manual':
+            self.annotation_tool = 'cvat'
+            self.use_api = False            
+        elif self.annotation_tool == 'general':
+            self.use_api = False   
 
 
 class MLADA(*inhertance_classes):
@@ -81,6 +87,8 @@ class MLADA(*inhertance_classes):
         print(opt)
         opt_dict = opt
         opt = MargParse(opt)
+        if not isinstance(opt.exp_name, str):
+            exit(1)
         # Setting random seeds to permit repeatability
         seed = 0
         random.seed(seed)
@@ -100,8 +108,6 @@ class MLADA(*inhertance_classes):
         img_size = opt.img_size
         self.is_gui = is_gui
         self.skip_rt = False
-        if isinstance(opt.data_dir, str):
-            self.tmp_data_dir = os.path.join(opt.data_dir, 'temp')
         cfg = f'config/{opt.model_name}.cfg'
         opt.checkpoint_dir = os.path.join(opt.checkpoint_dir, opt.exp_name)
         self.annotation_toolkit = AnnotationToolkit(self.opt, is_gui, self.textBrowser_signal if is_gui else None)
@@ -130,19 +136,18 @@ class MLADA(*inhertance_classes):
                         break
                 sleep(1)
         os.makedirs(opt.checkpoint_dir, exist_ok=True)
-        with open(f"{opt.checkpoint_dir}/config.json", 'w') as f:
+        with open(f"{os.path.join(opt.checkpoint_dir, 'config.json')}", 'w') as f:
             json.dump(opt_dict, f)
-        self.print_msg(f'Config file saved in {opt.checkpoint_dir}/config.json.')
+        self.print_msg(f"Config file saved in {os.path.join(opt.checkpoint_dir, 'config.json')}")
         self.annotation_toolkit.create_task()
         weights_path = os.path.join(f'{opt.checkpoint_dir}','best.weights') if resume else os.path.join(f'checkpoints',f'{opt.model_name}.weights')
-        if not (resume and os.path.exists(opt.checkpoint_dir)):
-            shutil.copy(weights_path, os.path.join(f'{opt.checkpoint_dir}','best.weights'))
         if not os.path.exists(weights_path):
             if resume:
                 self.exit_(1, f'Cannot find {weights_path}')
-            # download_file_from_google_drive('1BRJDDCMRXdQdQs6-x-3PmlzcEuT9wxJV', weights_path)
-            self.print_msg(f'Downloading the {opt.model_name} weights')
+            self.print_msg(f'Downloading the {opt.model_name} weights ...')
             wget.download('https://pjreddie.com/media/files/yolov3.weights', weights_path)
+        if not (resume and os.path.exists(opt.checkpoint_dir)):
+            shutil.copy(weights_path, os.path.join(f'{opt.checkpoint_dir}','best.weights'))
         self.logger = Log(opt, resume)
         # creating class-to-label and lable-to-class maps
         model = Darknet(cfg, opt, img_size=img_size)
@@ -181,7 +186,7 @@ class MLADA(*inhertance_classes):
         random_ordered_indices = np.arange(len(unlabelled_set))
         random.shuffle(random_ordered_indices)
         self.unlabelled_set = unlabelled_set
-        self.len_total_dataset = len(self.unlabelled_set)
+        self.len_total_dataset = len(self.unlabelled_set) + len(self.logger.labelled_filenames)
         self.total_iterations = int(
             np.ceil(self.len_total_dataset / self.opt.subset_size))
     # Instantiating visualiser
@@ -202,6 +207,9 @@ class MLADA(*inhertance_classes):
 
         self.subset_size = opt.subset_size
         self.total_steps = 0
+        if is_gui:
+            self.print_msg("Press 'Next Subset' to start the annotation process for the next subset.")
+
     
 
 
@@ -222,7 +230,7 @@ class MLADA(*inhertance_classes):
             self.print_msg(f"All the dataset is annotated!! The annotation files can be found in {os.path.join(self.opt.checkpoint_dir, 'total', 'label_2')}")
             return None
         self.print_msg(
-            f'Annotating the {make_ordinal(self.loop_iteration + 1)} subset of data from total {self.total_iterations} subsets')
+            f'Annotating the {make_ordinal(self.loop_iteration + 1)} subset of data from total {self.total_iterations} subsets ...')
         selection_size = min(len_unlabelled_set, self.opt.subset_size)
         if self.loop_iteration == 0 and len(self.logger.selected_filenames) > 0:
             subset_indices = [self.f2i[f] for f in self.logger.selected_filenames]
@@ -255,7 +263,8 @@ class MLADA(*inhertance_classes):
                     box_scores = output[:, 4].cpu().numpy()
                     sample_scores[i] = box_scores.mean()
             subset_indices = np.argsort(sample_scores)[:selection_size]
-
+        order_indx = np.argsort([self.unlabelled_set[i][0] for i in subset_indices])
+        subset_indices = subset_indices[order_indx]
         unlabelled_sub_dataset = Subset(self.unlabelled_set, subset_indices)
         remaining_indices = set(
             np.arange(len_unlabelled_set)).difference(subset_indices)
@@ -288,7 +297,7 @@ class MLADA(*inhertance_classes):
         all_outputs = []
         if self.is_gui:
             self.progressBar.show()
-        for batch_i, (imgs_path, imgs, _) in enumerate(data_loader):
+        for batch_i, (_, imgs, _) in enumerate(data_loader):
             if self.is_gui:
                 self.progressBar.setValue(((batch_i + 1)/len(data_loader))*100)
             imgs = set_device(imgs, self.is_cuda)
@@ -300,28 +309,30 @@ class MLADA(*inhertance_classes):
         
         return all_outputs
 
-    def evaluate(self):
+    def evaluate(self, pre_annotation_list=None, tag='subset'):
+        if tag != 'subset':
+            pre_annotation_list = None
         self.print_msg("\nEvaluation .....\n")
-        labelled_sub_dataset = Image2DAnnotationDataset(os.path.join(self.opt.checkpoint_dir, 'total'), self.labels,
+        labelled_sub_dataset = Image2DAnnotationDataset(os.path.join(self.opt.checkpoint_dir, 'temp' if tag=='subset' else 'total'), self.labels,
                                                         self.labels_to_classes, self.opt.data_format, self.opt.img_size, self.resize_tuple, img_root_dir=self.opt.data_dir)
         data_loader = torch.utils.data.DataLoader(
             labelled_sub_dataset, batch_size=self.opt.batch_size, shuffle=False, num_workers=self.opt.n_cpu)
-        mAP, average_precisions = self.model.evaluate(data_loader, self.classes_to_labels, self.progressBar if self.is_gui else None)
+        mAP, average_precisions = self.model.evaluate(data_loader, self.classes_to_labels, pre_annotation_list, self.progressBar if self.is_gui else None)
         if ( mAP > self.val_best_mAP):
             self.val_best_mAP = mAP
             self.model.save_weights("%s/kitti_best.weights" %
                                     (self.opt.checkpoint_dir))
             # self.print_msg(f"New Best mAP appear !!! {round(self.val_best_mAP, 2)}")
 
-        tag = 'subset'
         avg_precision = self.subset_avg_p_dict
         for k, v in average_precisions.items():
             avg_precision[tag + '_mAP_' + self.labels[k]].append(v)
         avg_precision[tag + '_mAP'].append(mAP)
+        print_str = f"Iteration: {self.loop_iteration}"
         for k, v in avg_precision.items():
-            self.print_msg(f"Iteration: {self.loop_iteration} {k}: {round(v[-1], 2)}")
+            print_str = f"{print_str}, {k}:{round(v[-1], 2)}"
             self.vis.plot(k, v[-1], self.loop_iteration)
-
+        self.print_msg(print_str)
         with open(os.path.join(self.opt.checkpoint_dir, self.opt.query_mode + '_' + tag + '_avg_p_dict.pkl'), 'wb') as f:
             pickle.dump(avg_precision, f)
         self.subset_avg_p_dict = avg_precision
@@ -329,7 +340,7 @@ class MLADA(*inhertance_classes):
         self.check_performance()
         return
 
-    def fine_tune_thread(self, is_training=True):
+    def fine_tune_thread(self):
 
         self.print_msg("\nTraining .....\n")
         self.training_epoch = 0
@@ -347,20 +358,19 @@ class MLADA(*inhertance_classes):
         training_model = set_device(deepcopy(self.model), self.is_cuda)
         optimizer = torch.optim.Adam(
             filter(lambda p: p.requires_grad, training_model.parameters()))
-        training_model.train(is_training)
-        freeze_backbone = 1 if self.training_iteration == 0 or self.training_iteration == 1 else 0
+        training_model.train(True)
+        freeze_backbone = True
         accumulated_batches = 4
         losses_list = defaultdict(list)
         if self.is_gui:
             self.progressBar.show()
-        for epoch in range(self.opt.epochs if is_training else 1):
+        for epoch in range(self.opt.epochs):
             if self.is_gui:
                 self.progressBar.setValue(((epoch + 1)/self.opt.epochs)*100)    
             # train
             # Freeze darknet53.conv.74 layers for first some epochs
-            training_model.freeze_parameters(epoch, freeze_backbone, is_training)
-            if is_training:
-                optimizer.zero_grad()
+            training_model.freeze_parameters(self.training_iteration / self.total_iterations, freeze_backbone)
+            optimizer.zero_grad()
             for batch_i, (_, imgs, targets) in enumerate(dataloader):
                 self.training_batch = batch_i
                 imgs = set_device(imgs, self.is_cuda)
@@ -372,44 +382,44 @@ class MLADA(*inhertance_classes):
                     x, y = torch.nonzero(no_annotation_ind, as_tuple=True)
                     targets[x, y, 0] = tensor_labels_to_class[targets[x, y, 0].long()].double()
 
-                if is_training:
-                    loss = training_model(imgs, targets)
-                    loss.backward()
-                    if ((batch_i + 1) % accumulated_batches ==
-                            0) or (batch_i == len(dataloader) - 1):
-                        optimizer.step()
-                        optimizer.zero_grad()
-                    self.total_steps += 1
+                # if is_training:
+                loss = training_model(imgs, targets)
+                loss.backward()
+                if ((batch_i + 1) % accumulated_batches ==
+                        0) or (batch_i == len(dataloader) - 1):
+                    optimizer.step()
+                    optimizer.zero_grad()
+                self.total_steps += 1
 
-                    if (batch_i + 1) % 1 == 0:
-                        for tag, value in training_model.losses.items():
-                            self.vis.plot('losses_' + tag, value, self.total_steps)
-                        self.vis.plot('total_loss', loss.item(),
-                                      self.total_steps)
-                        if not self.opt.background_training:
-                            msg = "[Epoch %d/%d, Batch %d/%d] [Losses: " % (
-                                    epoch,
-                                    self.opt.epochs,
-                                    batch_i,
-                                    len(dataloader)
-                                )
-                            for k, v in training_model.losses.items():
-                                msg += '%s: %f, ' % (k , v)
-                            msg += 'total: %f]' % (loss.item())
-                            self.print_msg(msg)
-                else:
-                    with torch.no_grad():
-                        loss = training_model(imgs, targets)
+                if (batch_i + 1) % 1 == 0:
+                    for tag, value in training_model.losses.items():
+                        self.vis.plot('losses_' + tag, value, self.total_steps)
+                    self.vis.plot('total_loss', loss.item(),
+                                    self.total_steps)
+                    if not self.opt.background_training:
+                        msg = "[Epoch %d/%d, Batch %d/%d] [Losses: " % (
+                                epoch,
+                                self.opt.epochs,
+                                batch_i,
+                                len(dataloader)
+                            )
                         for k, v in training_model.losses.items():
-                            losses_list[k].append(v)
-                        losses_list['total_loss'].append(loss.item())
+                            msg += '%s: %f, ' % (k , v)
+                        msg += 'total: %f]' % (loss.item())
+                        self.print_msg(msg)
+                # else:
+                #     with torch.no_grad():
+                #         loss = training_model(imgs, targets)
+                #         for k, v in training_model.losses.items():
+                #             losses_list[k].append(v)
+                #         losses_list['total_loss'].append(loss.item())
 
-            losses_list = None if is_training else {
-                k: np.array(v).mean() for k, v in losses_list.items()}
+            # losses_list = None if is_training else {
+            #     k: np.array(v).mean() for k, v in losses_list.items()}
+        losses_list = None
         self.training_iteration += 1
         training_model.save_weights("%s/best.weights" % (self.opt.checkpoint_dir))
         self.training_model = training_model
-
         return losses_list
 
     def fine_tune(self):
@@ -437,7 +447,10 @@ class MLADA(*inhertance_classes):
                 self.training_thread = threading.Thread(
                     target=self.fine_tune_thread)
                 self.training_thread.start()
+                
             else:
+                if self.training_model is not None:
+                    self.model = set_device(self.training_model, self.is_cuda)
                 self.fine_tune_thread()
         else:
             self.print_msg('Re-training is disabled as the desired performance has been achieved.')
@@ -449,7 +462,6 @@ class MLADA(*inhertance_classes):
             self.do_training = False
 
     def export_annotation(self, dataset, pre_annotation_list):
-
         pre_label_dir = os.path.join(self.opt.checkpoint_dir, 'temp', 'pre_label_2')
         os.makedirs(pre_label_dir, exist_ok=True)
         frames = []
@@ -464,7 +476,6 @@ class MLADA(*inhertance_classes):
             unpad_w = self.opt.img_size - pad_x
             sep = '\\' if os.name =='nt' else '/'
             img_filename = img_path.split(sep)[-1]
-
             if self.opt.data_format == 'kitti':
                 label_filename = img_filename.replace('jpeg', 'txt')
                 with open(os.path.join(pre_label_dir, label_filename), 'w') as f:
@@ -498,7 +509,7 @@ class MLADA(*inhertance_classes):
 
         if self.opt.data_format == 'openlabel':
             annotation_dict ={"openlabel":{"frames": frames}}
-            with open(os.path.join(self.opt.checkpoint_dir, 'subset_OL_annotations.json'), 'w') as f:
+            with open(os.path.join(self.opt.checkpoint_dir, 'Subset_OL_annotations.json'), 'w') as f:
                 json.dump(annotation_dict, f)
 
     def refine_pre_labels(self, dataset):
@@ -511,12 +522,13 @@ class MLADA(*inhertance_classes):
         if self.opt.data_format == 'kitti':
             for img_path, _, _ in dataset:
                 shutil.copy(img_path, tmp_image_dir)
-                label_path = img_path.replace('image', 'label').replace('jpeg', 'txt')
-                shutil.copy(label_path, gt_label_dir)
+                # label_path = img_path.replace('image', 'label').replace('jpeg', 'txt')
+                # shutil.copy(label_path, gt_label_dir)
             ## make subset.zip to be uploaded to the annotation tool
             os.makedirs(os.path.join(self.opt.checkpoint_dir,'Subset'), exist_ok=True)
             shutil.copytree(os.path.join(self.opt.checkpoint_dir, 'temp', 'pre_label_2'), os.path.join(self.opt.checkpoint_dir,'Subset', 'label_2'))
-            shutil.copytree(os.path.join(self.opt.checkpoint_dir, 'temp', 'image_2'), os.path.join(self.opt.checkpoint_dir, 'Subset', 'image_2'))
+            if not self.opt.use_api:
+                shutil.copytree(os.path.join(self.opt.checkpoint_dir, 'temp', 'image_2'), os.path.join(self.opt.checkpoint_dir, 'Subset', 'image_2'))
             shutil.make_archive(os.path.join(self.opt.checkpoint_dir, 'Subset'), 'zip', os.path.join(self.opt.checkpoint_dir,'Subset'))
             shutil.rmtree(os.path.join(self.opt.checkpoint_dir, 'Subset'))
 
@@ -538,32 +550,43 @@ class MLADA(*inhertance_classes):
 
             ########################################################################################################################################
         elif self.opt.data_format == 'openlabel':
-            with open(os.path.join(self.opt.data_dir, 'OL_annotation.json'), 'r') as f:
-                ann_dict = json.load(f)
-                frame_dict_list = ann_dict['openlabel']['frames']
-                new_frame_dict_list = []
-
+            os.makedirs(os.path.join(self.opt.checkpoint_dir,'Subset', 'images'), exist_ok=True)
             for img_path, _, _ in dataset:
-                shutil.copy(img_path, tmp_image_dir)
-                image_file_name = img_path.split(os.path.sep)[-1]
-                for frame_dict in frame_dict_list:
-                    if frame_dict[list(frame_dict.keys())[0]]['file'] == image_file_name:
-                        new_frame_dict_list.append(frame_dict)
+                shutil.copy(img_path, os.path.join(self.opt.checkpoint_dir,'Subset', 'images'))
+            shutil.move(os.path.join(self.opt.checkpoint_dir, 'Subset_OL_annotations.json'), os.path.join(self.opt.checkpoint_dir,'Subset'))
+            shutil.make_archive(os.path.join(self.opt.checkpoint_dir, 'Subset'), 'zip', os.path.join(self.opt.checkpoint_dir,'Subset'))
+            shutil.rmtree(os.path.join(self.opt.checkpoint_dir, 'Subset'))
+            # with open(os.path.join(self.opt.data_dir, 'OL_annotation.json'), 'r') as f:
+            #     ann_dict = json.load(f)
+            #     frame_dict_list = ann_dict['openlabel']['frames']
+            #     new_frame_dict_list = []
+
+            # for img_path, _, _ in dataset:
+            #     shutil.copy(img_path, tmp_image_dir)
+            #     image_file_name = img_path.split(os.path.sep)[-1]
+            #     for frame_dict in frame_dict_list:
+            #         if frame_dict[list(frame_dict.keys())[0]]['file'] == image_file_name:
+            #             new_frame_dict_list.append(frame_dict)
                 
-            ann_dict['openlabel']['frames'] = new_frame_dict_list
-            ## just for temps
-            with open(os.path.join(gt_label_dir, 'OL_annotation.json'), 'w') as f:
-                json.dump(ann_dict, f)
-            ## write the refined subset
-            with open(os.path.join(self.opt.checkpoint_dir, 'refined_OL_annotation.json'), 'w') as f:
-                json.dump(ann_dict, f)
+            # ann_dict['openlabel']['frames'] = new_frame_dict_list
+            # ## just for temps
+            # with open(os.path.join(gt_label_dir, 'OL_annotation.json'), 'w') as f:
+            #     json.dump(ann_dict, f)
+
+            filenames = list(map(lambda l: l.split(os.path.sep)[-1].split('.')[0], [d[0] for d in dataset]))
+            print(filenames)
+            self.logger.update_selected(filenames)
+            self.annotation_toolkit.correct_annotations()
+            ## TODO remove this on 
+            # with open(os.path.join(self.opt.checkpoint_dir, 'Refined_OL_annotation.json'), 'w') as f:
+            #     json.dump(ann_dict, f)
             
 
     def print_manual(self):
         print_str = '\nPlease type the following commands:\n\n'
         print_str += "'ns' for annotating Next Subset.\n"
         print_str += "'vs' for Visualise Annotation.\n"
-        print_str += "'rt' flip skip re-training\n."
+        print_str += "'rt' skip re-training.\n"
         print_str += "'db' for Disabling the Background re-training.\n"
         print_str += "'h' for Help.\n"
         print_str += "'q' for Quitting the program.\n"
@@ -581,20 +604,20 @@ class MLADA(*inhertance_classes):
         self.export_annotation(unlabelled_sub_dataset, pre_annotation_list)
         self.refine_pre_labels(unlabelled_sub_dataset)
                 
-        shutil.rmtree(os.path.join(self.opt.checkpoint_dir, 'temp'))
         ####################### Unzip refined labels ###############
         if self.opt.data_format == 'kitti':
             os.makedirs(os.path.join(self.opt.checkpoint_dir, 'unzipped'))
             shutil.unpack_archive(os.path.join(self.opt.checkpoint_dir, 'Refined_Subset.zip'), os.path.join(self.opt.checkpoint_dir, 'unzipped'), 'zip')
-            # label_fname_list = glob(os.path.join(self.opt.checkpoint_dir, 'unzipped', os.path.join('**', '*.txt')))
-            # if len(label_fname_list) < self.opt.subset_size:
-            label_fname_list = glob(os.path.join(self.opt.checkpoint_dir, 'unzipped', os.path.join('**', '**', '*.txt')))
+            label_fname_list = glob(os.path.join(self.opt.checkpoint_dir, 'unzipped', os.path.join('**', '*.txt')))
+            if len(label_fname_list) <= 1:
+                label_fname_list = glob(os.path.join(self.opt.checkpoint_dir, 'unzipped', os.path.join('**', '**', '*.txt')))
             # print(label_fname_list)
             flag_dict = {k:False for k in self.logger.selected_filenames}
             for f in label_fname_list:
                 k = f.split(os.path.sep)[-1].split('.')[0]
                 if k in self.logger.selected_filenames:
                     shutil.copy(f, os.path.join(self.opt.checkpoint_dir, 'total', 'label_2'))
+                    shutil.copy(f, os.path.join(self.opt.checkpoint_dir, 'temp', 'label_2'))
                     flag_dict[k] = True
             missed_id_list = []
             for k , v in flag_dict.items():
@@ -607,7 +630,7 @@ class MLADA(*inhertance_classes):
 
 
         elif self.opt.data_format == 'openlabel':
-            with open(os.path.join(self.opt.checkpoint_dir, 'refined_OL_annotation.json'), 'r') as f:
+            with open(os.path.join(self.opt.checkpoint_dir, 'Refined_Subset_OL_annotations.json'), 'r') as f:
                     refined_ann_dict = json.load(f)
                     new_frame_dict_list = refined_ann_dict['openlabel']['frames']
             if os.path.exists(os.path.join(self.opt.checkpoint_dir, 'total', 'OL_annotation.json')):
@@ -620,19 +643,17 @@ class MLADA(*inhertance_classes):
                 json.dump(total_ann_dict, f)
         do_rt = not self.checkBox.isChecked() if self.is_gui else not self.skip_rt
         if do_rt:
-            self.retrain()
+            self.evaluate(pre_annotation_list=pre_annotation_list)
+            self.fine_tune()
         ## log the filnames labelled
+        shutil.rmtree(os.path.join(self.opt.checkpoint_dir, 'temp'))
         self.logger.update_labelled()
         self.annotation_toolkit.destroy_annotation()
         if self.is_gui:
             self.subset_selection_thread.quit()
+            self.print_msg("Press 'Next Subset' to start the annotation process for the next subset.")
         return
 
-    def retrain(self):
-        self.evaluate()
-        self.fine_tune()
-        return
-    
     def run_loop(self):
         self.print_manual()
         while True:
@@ -701,7 +722,7 @@ if __name__ == '__main__':
             if len(missed_keys) > 0:
                 print(f"The selected config file does not contain the following keys: {', '.join(missed_keys)}")
                 exit(1)
-            if opt['data_format'] == 'kitti' and not os.path.exists(os.path.join(opt['data_dir'],'image_2')) or not os.path.exists(os.path.join(opt['data_dir'],'label_2')):
+            if opt['data_format'] == 'kitti' and not os.path.exists(os.path.join(opt['data_dir'],'image_2')):
                 print(f'The path {opt.data_dir} does not contain image_2 or label_2 folders. Please check the structure of kitti dataset.')
                 exit(1)
             mainwindow = MLADA(opt=opt)

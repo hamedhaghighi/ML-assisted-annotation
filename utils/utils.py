@@ -473,7 +473,7 @@ def make_ordinal(n):
 def set_device(pyt_element, is_cuda):
         if is_cuda:
             pyt_element = pyt_element.cuda()
-        return pyt_element.cpu()
+        return pyt_element
     
 
 def show_msgbox(parent, msg, button=None, type='info', is_gui=True):

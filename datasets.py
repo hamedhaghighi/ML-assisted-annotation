@@ -235,16 +235,22 @@ def get_bbox_class(ann, data_format):
 
 
 class Image2DAnnotationDataset(Dataset):
+    img_extension = ''
     def __init__(self, root_dir, filter_lables, labels_to_classes, data_format, img_size=416, resize_tuple=None, img_root_dir=None, labelled_filenames=None, parent=None):
         self.root_dir = root_dir
         self.images_path, self.labels_path = get_image_labels_path(root_dir, data_format)
+        if Image2DAnnotationDataset.img_extension == '':
+            Image2DAnnotationDataset.img_extension = self.images_path[0].split('.')[-1]
         if len(self.images_path) == 0 and parent is not None:
             parent.exit_(1, f'No data found in {root_dir}')
         self.sep = os.path.sep
         if labelled_filenames is not None:
             self.images_path = [img for img in self.images_path if img.split(self.sep)[-1].split('.')[0] not in  labelled_filenames]
-            self.labels_path = [l for l in self.labels_path if l.split(self.sep)[-1].split('.')[0] not in labelled_filenames]
-
+            if data_format == 'kitti':
+                self.labels_path = [l for l in self.labels_path if l.split(self.sep)[-1].split('.')[0] not in labelled_filenames]
+            elif data_format == 'openlabel':
+                self.labels_path = [l for l in self.labels_path if l[list(l.keys())[0]]['file'].split('.')[0] not in labelled_filenames]
+                
         self.filter_labels = filter_lables
         self.labels_to_classes = labels_to_classes
         self.img_shape = (img_size, img_size)
@@ -255,16 +261,20 @@ class Image2DAnnotationDataset(Dataset):
 
     def __getitem__(self, index):
         # reading image
-        if self.data_format == 'openlabel':
-            label_path = self.labels_path[index]
+        if len(self.labels_path) == 0:
+            label_path = None
         else:
-            label_path = self.labels_path[index].rstrip()
+            if self.data_format == 'openlabel':
+                label_path = self.labels_path[index]
+            else:
+                label_path = self.labels_path[index].rstrip()
         if self.img_root_dir is not None:
             if self.data_format == 'kitti':
-                img_name = label_path.split(self.sep)[-1].replace('txt', 'jpeg')
+                img_name = label_path.split(self.sep)[-1].replace('txt', Image2DAnnotationDataset.img_extension)
+                
                 im_path = os.path.join(self.img_root_dir, 'image_2', img_name)
             elif self.data_format == 'openlabel':
-                label_file_name = label_path[list(label_path.keys())[0]]['file'].replace('txt', 'jpeg')
+                label_file_name = label_path[list(label_path.keys())[0]]['file'].replace('txt', Image2DAnnotationDataset.img_extension)
                 im_path = os.path.join(self.img_root_dir, 'image_2', label_file_name)
         else:
             im_path = self.images_path[index].rstrip()
@@ -283,40 +293,42 @@ class Image2DAnnotationDataset(Dataset):
         input_img = torch.from_numpy(input_img).float()
         # reading label
         labels = np.zeros((self.max_objects, 5))
-        if self.data_format == 'openlabel':
-            idx = 0
-            object_list = label_path[list(label_path.keys())[0]]['objects']
-            for ind, obj in enumerate(object_list):
-                bbox = obj[str(ind)]['object_data']['bbox'][0]
-                class_str = bbox['name']
-                if idx < self.max_objects:
-                    c = category_to_class(class_str, self.filter_labels, self.labels_to_classes)
-                    if c!= -1:
-                        x1, y1, width, height = bbox['val']
-                        labels[idx, 0] = c
-                        labels[idx, 1] = (x1 + width/2 + pad[1][0]) / padded_w
-                        labels[idx, 2] = (y1 + height/2 + pad[0][0]) / padded_h
-                        labels[idx, 3] = width / padded_w
-                        labels[idx, 4] = height / padded_h
-                        idx = idx + 1
-        else:
-            idx = 0
-            f = open(label_path, 'r')
-            for line in f.readlines():
-                ann = line.rstrip().split(' ')
-                class_str, bbox = get_bbox_class(ann, self.data_format)
-                if idx < self.max_objects:
-                    c = category_to_class(class_str, self.filter_labels, self.labels_to_classes)
-                    if c != -1:
-                        labels[idx, 0] = c
-                        bbox = [b * (ratio if ratio is not None else 1) for b in bbox]
-                        labels[idx, 1] = ((bbox[0] + bbox[2] + 2 * pad[1][0]) / 2) / padded_w
-                        labels[idx, 2] = ((bbox[1] + bbox[3] + 2 * pad[0][0]) / 2) / padded_h
-                        labels[idx, 3] = (bbox[2] - bbox[0]) / padded_w
-                        labels[idx, 4] = (bbox[3] - bbox[1]) / padded_h
-                        idx = idx + 1
+        if label_path is not None:
+            if self.data_format == 'openlabel':
+                idx = 0
+                object_list = label_path[list(label_path.keys())[0]]['objects']
+                for ind, obj in enumerate(object_list):
+                    bbox = obj[str(ind)]['object_data']['bbox'][0]
+                    class_str = bbox['name']
+                    if idx < self.max_objects:
+                        c = category_to_class(class_str, self.filter_labels, self.labels_to_classes)
+                        if c!= -1:
+                            x1, y1, width, height = bbox['val']
+                            labels[idx, 0] = c
+                            labels[idx, 1] = (x1 + width/2 + pad[1][0]) / padded_w
+                            labels[idx, 2] = (y1 + height/2 + pad[0][0]) / padded_h
+                            labels[idx, 3] = width / padded_w
+                            labels[idx, 4] = height / padded_h
+                            idx = idx + 1
+            else:
+                idx = 0
+                f = open(label_path, 'r')
+                for line in f.readlines():
+                    ann = line.rstrip().split(' ')
+                    class_str, bbox = get_bbox_class(ann, self.data_format)
+                    if idx < self.max_objects:
+                        c = category_to_class(class_str, self.filter_labels, self.labels_to_classes)
+                        if c != -1:
+                            labels[idx, 0] = c
+                            bbox = [b * (ratio if ratio is not None else 1) for b in bbox]
+                            labels[idx, 1] = ((bbox[0] + bbox[2] + 2 * pad[1][0]) / 2) / padded_w
+                            labels[idx, 2] = ((bbox[1] + bbox[3] + 2 * pad[0][0]) / 2) / padded_h
+                            labels[idx, 3] = (bbox[2] - bbox[0]) / padded_w
+                            labels[idx, 4] = (bbox[3] - bbox[1]) / padded_h
+                            idx = idx + 1
         filled_labels = torch.from_numpy(labels)
         return im_path, input_img, filled_labels
 
     def __len__(self):
-        return len(self.labels_path)
+        dataset_len = max(len(self.images_path), len(self.labels_path))
+        return dataset_len

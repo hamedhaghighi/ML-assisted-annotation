@@ -402,7 +402,7 @@ class Darknet(nn.Module):
         fp.close()
 
 
-    def evaluate(self, data_loader, classes_to_labels, progressBar=None):
+    def evaluate(self, data_loader, classes_to_labels, pre_annotation_list=None, progressBar=None):
         self.eval()
         all_detections = []
         all_annotations = []
@@ -410,11 +410,14 @@ class Darknet(nn.Module):
             progressBar.show()
         for batch_i, (_, imgs, targets) in enumerate(data_loader):
             # progressBar.setValue(((batch_i + 1)/len(data_loader))*100)
-            imgs = set_device(imgs, self.is_cuda)
-            with torch.no_grad():
-                outputs = self.__call__(imgs)
-                outputs = non_max_suppression(
-                    outputs, 80, classes_to_labels, conf_thres=self.opt.conf_thres, nms_thres=self.opt.nms_thres)
+            if pre_annotation_list is None:
+                imgs = set_device(imgs, self.is_cuda)
+                with torch.no_grad():
+                    outputs = self.__call__(imgs)
+                    outputs = non_max_suppression(
+                        outputs, 80, classes_to_labels, conf_thres=self.opt.conf_thres, nms_thres=self.opt.nms_thres)
+            else:
+                outputs = pre_annotation_list[batch_i * self.opt.batch_size: (batch_i + 1) * self.opt.batch_size]
 
             for output, annotations in zip(outputs, targets):
                 all_detections.append([np.array([])
@@ -519,13 +522,13 @@ class Darknet(nn.Module):
         return mAP, average_precisions
 
 
-    def freeze_parameters(self, epoch, freeze_backbone, is_training):
-        if freeze_backbone and is_training:
-            if epoch < 60:
+    def freeze_parameters(self, completed_percentage, freeze_backbone):
+        if freeze_backbone:
+            if completed_percentage < 0.5:
                 for i, (name, p) in enumerate(self.named_parameters()):
                     if int(name.split('.')[1]) < 75:  # if layer < 75
                         p.requires_grad = False
-            elif epoch >= 60:
+            elif completed_percentage >= 0.5:
                 for i, (name, p) in enumerate(self.named_parameters()):
                     if int(name.split('.')[1]) < 75:  # if layer < 75
                         p.requires_grad = True

@@ -72,8 +72,10 @@ class ConfigUI(QDialog, Ui_Dialog):
         self.query_mode.activated.connect(lambda: self.set_var('query_mode', self.query_mode.currentText()))
         self.import_config.clicked.connect(self.read_cfg)
         self.first_ok.clicked.connect(self.save_conf)
-        self.cvat_radio_button_2.clicked.connect(lambda: self.set_var('annotation_tool', 'cvat'))
-        self.ilabel_radio_button.clicked.connect(lambda: self.set_var('annotation_tool', 'ilabel'))
+        self.cvat_api_button.clicked.connect(lambda: self.set_var('annotation_tool', 'cvat_api'))
+        self.cvat_manual_button.clicked.connect(lambda: self.set_var('annotation_tool', 'cvat_manual'))
+        self.general_button.clicked.connect(lambda: self.set_var('annotation_tool', 'general'))
+
         self.labels_list_var = []
         self.labels_to_classes_var = []
 
