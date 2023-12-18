@@ -97,13 +97,14 @@ class MLADA(*inhertance_classes):
         self.training_thread = None
         self.training_epoch = 0
         self.training_batch = 0
-        self.do_training = True
+        self.do_training = False
         self.training_iteration = 0
         self.training_dataloader_len = 0
         self.loop_iteration = 0
         self.opt = opt
         img_size = opt.img_size
         self.is_gui = is_gui
+        self.extension = 'jpeg'
         self.skip_rt = False
         cfg = f'config/{opt.model_name}.cfg'
         opt.checkpoint_dir = os.path.join(opt.checkpoint_dir, opt.exp_name)
@@ -171,7 +172,7 @@ class MLADA(*inhertance_classes):
         resize_tuple = None
         # Initiating Datasets
         unlabelled_set = Image2DAnnotationDataset(
-            opt.data_dir, labels, labels_to_classes, opt.data_format, opt.img_size, resize_tuple, None, self.logger.labelled_filenames if resume else None, self)
+            opt.data_dir, labels, labels_to_classes, opt.data_format, opt.img_size, resize_tuple, None, self.logger.labelled_filenames if resume else None, self, self.extension)
         filenames = list(map(lambda l: l.split(os.path.sep)[-1].split('.')[0], unlabelled_set.images_path))
         self.f2i = {f:i for i, f in enumerate(filenames)}
    
@@ -198,6 +199,7 @@ class MLADA(*inhertance_classes):
         self.val_avg_p_dict = defaultdict(list)
         self.subset_avg_p_dict = defaultdict(list)
         self.subset_MAF = defaultdict(list)
+        self.subset_MAF_no_MLADA = defaultdict(list)
 
         self.subset_size = opt.subset_size
         self.total_steps = 0
@@ -306,11 +308,13 @@ class MLADA(*inhertance_classes):
         if tag != 'subset':
             pre_annotation_list = None
         labelled_sub_dataset = Image2DAnnotationDataset(os.path.join(self.opt.checkpoint_dir, 'temp' if tag == 'subset' else 'total'), self.labels,
-                                                        self.labels_to_classes, self.opt.data_format, self.opt.img_size, self.resize_tuple, img_root_dir=self.opt.data_dir)
+                                                        self.labels_to_classes, self.opt.data_format, self.opt.img_size, self.resize_tuple, img_root_dir=self.opt.data_dir, extension=self.extension)
         data_loader = torch.utils.data.DataLoader(
             labelled_sub_dataset, batch_size=self.opt.batch_size, shuffle=False, num_workers=self.opt.n_cpu)
         mAP, average_precisions = self.model.evaluate(data_loader, self.classes_to_labels, pre_annotation_list, self.progressBar if self.is_gui else None)
         MAF = self.model.evaluate_MAF(data_loader, self.classes_to_labels,pre_annotation_list, self.progressBar if self.is_gui else None)
+        MAF_no_MLADA = self.model.evaluate_MAF(data_loader, self.classes_to_labels,[None] * len(pre_annotation_list),  None)
+
         if ( mAP > self.val_best_mAP):
             self.val_best_mAP = mAP
             self.model.save_weights("%s/kitti_best.weights" %
@@ -321,6 +325,9 @@ class MLADA(*inhertance_classes):
             print_str = f"{print_str}, {k}:{round(v, 2)}"
             self.vis.plot(k, v, self.loop_iteration)
             self.subset_MAF[k].append(v)
+        for k, v in MAF_no_MLADA.items():
+            self.vis.plot('No_MLADA_'+k, v, self.loop_iteration)
+            self.subset_MAF_no_MLADA[k].append(v)
         self.print_msg(print_str)
         avg_precision = self.subset_avg_p_dict
         for k, v in average_precisions.items():
@@ -336,6 +343,8 @@ class MLADA(*inhertance_classes):
             pickle.dump(avg_precision, f)
         with open(os.path.join(self.opt.checkpoint_dir, self.opt.query_mode + '_' + tag + '_MAF.pkl'), 'wb') as f:
             pickle.dump(self.subset_MAF, f)
+        with open(os.path.join(self.opt.checkpoint_dir, self.opt.query_mode + '_' + tag + '_MAF_no_MLADA.pkl'), 'wb') as f:
+            pickle.dump(self.subset_MAF_no_MLADA, f)
         self.subset_avg_p_dict = avg_precision
         ###### check performance ##############################################
         self.check_performance()
@@ -348,7 +357,7 @@ class MLADA(*inhertance_classes):
         self.training_batch = 0
         total_data_dir = os.path.join(self.opt.checkpoint_dir, 'total')
         train_set = Image2DAnnotationDataset(total_data_dir, self.labels, self.labels_to_classes,
-                                             self.opt.data_format, self.opt.img_size, self.resize_tuple, img_root_dir=self.opt.data_dir)
+                                             self.opt.data_format, self.opt.img_size, self.resize_tuple, img_root_dir=self.opt.data_dir, extension=self.extension)
         if len(train_set) == 0:
             self.exit_(1, f'No data found in {total_data_dir}')
         
@@ -484,7 +493,7 @@ class MLADA(*inhertance_classes):
         if self.opt.data_format == 'kitti':
             for img_path, _, _ in dataset:
                 shutil.copy(img_path, tmp_image_dir)
-                label_path = img_path.replace('image', 'label').replace('png', 'txt')
+                label_path = img_path.replace('image', 'label').replace(self.extension, 'txt')
                 shutil.copy(label_path, gt_label_dir)
             ## make subset.zip to be uploaded to the annotation tool
             # os.makedirs(os.path.join(self.opt.checkpoint_dir,'Subset'), exist_ok=True)
@@ -500,7 +509,7 @@ class MLADA(*inhertance_classes):
             self.logger.update_selected(filenames)
             ############### TODO: remove this when on the last release ##################################################################
             for img_path, _, _ in dataset:
-                label_path = img_path.replace('image', 'label').replace('png', 'txt')
+                label_path = img_path.replace('image', 'label').replace(self.extension, 'txt')
                 shutil.copy(label_path, gt_label_dir_t)
             # os.makedirs(os.path.join(self.opt.checkpoint_dir,'Refined_Subset'), exist_ok=True)
             # shutil.copytree(os.path.join(self.opt.checkpoint_dir, 'total', 'label_2'), os.path.join(self.opt.checkpoint_dir,'Refined_Subset', 'label_2'))
@@ -573,7 +582,8 @@ class MLADA(*inhertance_classes):
         #     with open(os.path.join(self.opt.checkpoint_dir, 'total', 'OL_annotation.json'), 'w') as f:
         #         json.dump(total_ann_dict, f)
         self.evaluate(pre_annotation_list)
-        self.fine_tune_thread()
+        if self.do_training:
+            self.fine_tune_thread()
         shutil.rmtree(os.path.join(self.opt.checkpoint_dir, 'temp'))
         self.print_msg('\nTraining is finished.\n')
         ## log the filnames labelled
