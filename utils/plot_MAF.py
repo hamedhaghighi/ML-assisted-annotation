@@ -35,7 +35,8 @@ def average_mAP_improvement(mAP_list):
     return mAP_list.tolist()
 
 
-exp_name_1 = 'test_MAF'
+exp_name_1 = 'calc_MAF_no_training'
+exp_name_2 = 'calc_MAF_w_mlada'
 
 
 def convert_to_percentage(vector, fraction):
@@ -48,18 +49,22 @@ fraction_2 = 500 / int(1.0 * kitti_num_samples)
 fraction_3 = 1000 / int(1.0 * kitti_num_samples)
 
 dict_list = []
-labels_list = ['MLADA', 'No_MLADA']
+labels_list = ['MLADA_wo_training', 'MLADA_w_training', 'No_MLADA']
 with open(os.path.join('checkpoints', exp_name_1, 'random_subset_MAF.pkl'), 'rb') as f:
     dict_list.append(pickle.load(f))
-with open(os.path.join('checkpoints', exp_name_1, 'random_subset_MAF_no_MLADA.pkl'), 'rb') as f:
+with open(os.path.join('checkpoints', exp_name_2, 'random_subset_MAF.pkl'), 'rb') as f:
     dict_list.append(pickle.load(f))
+with open(os.path.join('checkpoints', exp_name_2, 'random_subset_MAF_no_MLADA.pkl'), 'rb') as f:
+    dict_list.append(pickle.load(f))
+# with open(os.path.join('checkpoints', exp_name_1, 'subset_avg_p_dict.pkl'), 'rb') as f:
+#     a = pickle.load(f)
 MAF_dict = {}
 for dict_ in dict_list:
     for k , v in dict_.items():
         if k in MAF_dict:
-            MAF_dict[k]= np.stack([dict_[k], MAF_dict[k]], axis=0)
+            MAF_dict[k]= np.concatenate([MAF_dict[k], np.array(dict_[k])[None, :]], axis=0)
         else:
-            MAF_dict[k] = np.array(dict_[k])
+            MAF_dict[k] = np.array(dict_[k])[None, :]
 
 # with open(os.path.join('checkpoints', exp_name_1, 'random_subset_avg_p_dict.pkl'), 'rb') as f:
 #     subset_avg_p_dict = pickle.load(f)
@@ -67,33 +72,37 @@ for dict_ in dict_list:
 # MAF_dict = {k: np.array(v) for k ,v in MAF_dict.items()}
 n_gt_bbx= MAF_dict['bbox_n_correction'] + MAF_dict['bbox_creation']
 n_pred_bbx= MAF_dict['bbox_n_correction'] + MAF_dict['bbox_deletion']
-MAF_dict['bbox_correction'] = MAF_dict['bbox_correction'] / MAF_dict['bbox_n_correction']
+MAF_dict['bbox_displacement'] = MAF_dict['bbox_correction'] / MAF_dict['bbox_n_correction']
+# MAF_dict['bbox_n_correction'] = MAF_dict['bbox_n_correction'] / n_pred_bbx
+MAF_dict['bbox_detected'] = MAF_dict['bbox_correct'] / n_pred_bbx
 MAF_dict['class_correction'] = MAF_dict['class_correction'] / MAF_dict['bbox_n_correction']
 MAF_dict['bbox_creation'] = MAF_dict['bbox_creation'] / n_gt_bbx
 MAF_dict['bbox_deletion'] = MAF_dict['bbox_deletion'] / n_pred_bbx
-MAF_dict.pop('bbox_n_correction');MAF_dict.pop('bbox_creation_h');MAF_dict.pop('bbox_creation_w');MAF_dict.pop('n_samples')
+MAF_dict.pop('bbox_n_correction');MAF_dict.pop('bbox_correction')
+MAF_dict.pop('bbox_creation_h');MAF_dict.pop('bbox_creation_w');MAF_dict.pop('n_samples');MAF_dict.pop('bbox_correct')
 for k , v in MAF_dict.items():
     # plt.subplot(3, 2, 1)
-    plt.figure()
-    # l_v = 31
+    fig = plt.figure()
     width = 0.5
-    x = np.arange(v.shape[1]).tolist()
+    x = np.arange(1, v.shape[1] + 1).tolist()
     for i, v_i in enumerate(v):
-        plt.plot(x, v_i, label=labels_list[i])
+        if not any(np.isnan(v_i)):
+            plt.plot(x, v_i, label=labels_list[i])
     # plt.bar(x, v, width=width)
     x_ticks = x[::5]
-    # x_ticks.append(x[-1])
+    x_ticks.append(x[-1])
     x_ticks_labels = convert_to_percentage(x_ticks, fraction_1)
     # x_ticks_labels.append('100%')
     # y_ticks_array = np.arange(-50, 105, 10)
     plt.xticks(x_ticks, x_ticks_labels)
     # plt.yticks(y_ticks_array, [str(a) + '%' for a in y_ticks_array])
-    # plt.title('Average mAP gain')
+    # plt.title(k + " vs Percentage of labelling data")
     plt.xlabel('Percentage of labelling data')
     plt.ylabel(k)
     plt.legend(loc='lower right')
     plt.grid(alpha=0.8)
-    plt.show()
+    fig.savefig(os.path.join('checkpoints/results_fig', k + '.png'))
+    # plt.show()
 
 # plt.subplot(3, 2, 3)
 # v1 = average_mAP_improvement(val_avg_p_dict_500['val_mAP'])
