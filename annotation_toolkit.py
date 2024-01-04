@@ -1,25 +1,24 @@
+import os
+import traceback
+from copy import copy
+from getpass import getpass
+from glob import glob
+from time import sleep
+
+from cvat_sdk.api_client import ApiClient, Configuration, models
+from cvat_sdk.api_client.models import *
 from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices
-from ui_files.instruction_ui import Ui_Dialog
-from login import Ui_Login as login_ui
-from PyQt5.QtWidgets import QDialog
-import os
-import requests
-import json
-from pprint import pprint
-from glob import glob
-from cvat_sdk.api_client import Configuration, ApiClient, models, apis, exceptions
-from cvat_sdk.api_client.models import *
-from copy import copy
+from PyQt5.QtWidgets import QDialog, QMessageBox
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait 
-from selenium.webdriver.support import expected_conditions as EC 
-from time import sleep
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+from ui_files.instruction_ui import Ui_Dialog
+from ui_files.login import Ui_Login as login_ui
 from utils.utils import show_msgbox
-from PyQt5.QtWidgets import QMessageBox
-from getpass import getpass
-import traceback
+
 
 class InstructionUI(QDialog, Ui_Dialog):
     def __init__(self, parent, message):
@@ -48,13 +47,14 @@ class LoginUI(QDialog, login_ui):
 
 
 class AnnotationToolkit:
-    def __init__(self, opt, is_gui, text_browser_signal=None):
+    def __init__(self, opt, is_gui, is_two_d = True, text_browser_signal=None):
         self.tool_name = opt.annotation_tool
         self.checkpoint_dir = opt.checkpoint_dir
         self.is_gui = is_gui
         self.text_browser_signal = text_browser_signal
         self.use_api = opt.use_api
         self.opt = opt
+        self.is_two_d = is_two_d
         if self.use_api and self.tool_name == 'cvat':
             if is_gui:
                 self.print_msg('Please enter your CVAT.ai account credential on the opened window.')
@@ -65,7 +65,6 @@ class AnnotationToolkit:
                 self.print_msg('Please enter your CVAT.ai account credential below:')
                 self.user = input('username:')
                 self.password = getpass()
-                # TODO: remove this line
             self.configuration = Configuration(host="https://app.cvat.ai",username=self.user, password=self.password)
             try:
                 ـ = ApiClient(self.configuration)
@@ -94,8 +93,8 @@ class AnnotationToolkit:
                     self.print_msg(f'Api call was not successful! {response.data}. Trying again ...')
             except Exception as e:
                 self.print_msg(traceback.format_exc())
-                self.print_msg(f'Exception when calling CVAT.ai TasksApi {e}')
-        self.print_msg("Couldn't make the api call after maximum tries. Please try again.")
+                self.print_msg(f'Exception when calling CVAT.ai TasksApi {e}\n. Please try again or use manual integration with CVAT.ai.')
+        self.print_msg("Couldn't make the api call after maximum tries. Please try again or use manual integration with CVAT.ai.")
         exit(1)
 
     def create_task(self):
@@ -117,9 +116,12 @@ class AnnotationToolkit:
                         self.print_msg(f'Annotation task with id:{self.task_id} is created on CVAT.ai.')
                         root_files = self.opt.data_dir
                         if self.opt.data_format == 'kitti':
-                            root_files = os.path.join(root_files, 'image_2')
-                        self.print_msg('Uploading image dataset to the task ...')
-                        task_data = models.DataRequest(image_quality=75, client_files=[open(img_path, 'rb') for img_path in list(glob(os.path.join(root_files, '*')))],)
+                            root_files = os.path.join(root_files, 'image_2' if self.is_two_d else 'velodyne_reduced')
+                            # shutil.make_archive(os.path.join(root_files, 'velodyne_reduced'), 'zip', os.path.join(root_files,'velodyne_reduced'))
+                        
+                        self.print_msg('Uploading the dataset to the task ...')
+                        task_data = models.DataRequest(image_quality=75, client_files=[open(data_path, 'rb') for data_path in list(glob(os.path.join(root_files, '*')))],)
+                        # task_data = models.DataRequest(image_quality=75, client_files=[open(data_path, 'rb') for data_path in list(glob(os.path.join(root_files, '*')))],)
                         self.try_func(api_client.tasks_api.create_data, id=task.id, data_request=task_data, _content_type="multipart/form-data", _check_status=False, _parse_response=False)
                         self.print_msg('Image dataset is uploaded successfully.')
 
@@ -141,7 +143,7 @@ class AnnotationToolkit:
                 self.print_msg('Uploading subset pre-annotation to the task.')
                 with ApiClient(self.configuration) as api_client:
                     self.try_func(api_client.tasks_api.update_annotations, is_upload_annotation=True, id=self.task_id,\
-                                format='KITTI 1.0', _content_type='multipart/form-data')
+                                format='KITTI 1.0' if self.is_two_d else 'Kitti Raw Format 1.0', _content_type='multipart/form-data')
                 self.print_msg('The subset pre-annotation is uploaded to the task.')
                     
 
@@ -160,7 +162,13 @@ class AnnotationToolkit:
                         if input() == 'ok':
                             break 
                 with ApiClient(self.configuration) as api_client:
-                    data, _ = self.try_func(api_client.jobs_api.list, task_id=self.task_id)
+                    while True:
+                        data, _ = self.try_func(api_client.jobs_api.list, task_id=self.task_id)
+                        if len(data.results) > 0:
+                            break
+                        self.print_msg('Wait for a few minutes untill the task is ready for annotation on CVAT.ai server ...')
+                        sleep(60)
+
                     job_id = data.results[0].id       
                     url = f'https://app.cvat.ai/tasks/{self.task_id}/jobs/{job_id}'
                     if self.driver is None:
@@ -196,7 +204,9 @@ class AnnotationToolkit:
                                         break
                                 break
                     self.print_msg('Downloading the refined annotations ...')
-                    data , response = self.try_func(api_client.tasks_api.retrieve_annotations, id=self.task_id, format='KITTI 1.0', filename='subset.zip', action='download', _parse_response=False)
+                    data , response = self.try_func(api_client.tasks_api.retrieve_annotations, id=self.task_id,\
+                            format='KITTI 1.0' if self.is_two_d else 'Kitti Raw Format 1.0', filename='subset.zip', action='download', _parse_response=False)   
+                    
                     with open(os.path.join(self.checkpoint_dir, 'Refined_Subset.zip'), 'wb') as output_file:
                         output_file.write(response.data)
                     self.print_msg('The refined annotations are downloaded.')
@@ -212,9 +222,9 @@ class AnnotationToolkit:
                 _str = self.get_messages('label_refinement').split(' ')
                 _str = filter(lambda s: s!='', _str)
                 self.print_msg(' '.join(_str))
-                while True:
-                    if input() == 'ok':
-                        break 
+                # while True:
+                #     if input() == 'ok':
+                #         break 
         self.check_annotation()
 
     def destroy_annotation(self):
@@ -241,7 +251,7 @@ class AnnotationToolkit:
         if self.tool_name == 'cvat':
             label_refinement_msg = f"Manually refine labels, following the instructions below:{br}\
             1- Upload pre-annotations \"{os.path.join(self.checkpoint_dir,'Subset.zip')}\" into the manual annotation tool (see the guidelines {get_a_ref('https://opencv.github.io/cvat/docs/manual/advanced/export-import-datasets/#upload-annotations', 'here')}).{br}\
-            2- Use the right arrow on the keyboard to view the next annotated image.{br}\
+            2- Use the right arrow on the keyboard to view the next annotated data.{br}\
             3- Refine the annotations using the tool (see guidelines {get_a_ref('https://opencv.github.io/cvat/docs/manual/advanced/annotation-with-rectangles/', 'here')}).{br}\
             4- Save the project and export the dataset as \"Refined_Subset.zip\" to \"{self.checkpoint_dir}\" directory (see the guidelines {get_a_ref('https://opencv.github.io/cvat/docs/manual/advanced/export-import-datasets/#export-dataset', 'here')}). {br}\
             5- Delete the annotation in the task to avoid the confusion with the next annotation subset. {br} \
@@ -260,7 +270,7 @@ class AnnotationToolkit:
             subset_ann_filename = 'Subset.zip'
             refined_ann_filename = 'Refined_Subset.zip' if self.opt.data_format == 'kitti' else 'Refined_Subset_OL_annotations.json'
             label_refinement_msg = f"Use the following instructions to manually refine the pre-annotations:{br}\
-            1- Create an annotation task by uploading the current subset images and pre-annotations provided in \"{os.path.join(self.checkpoint_dir, subset_ann_filename)}\". {br}\
+            1- Create an annotation task by uploading the current subset of data and pre-annotations provided in \"{os.path.join(self.checkpoint_dir, subset_ann_filename)}\". {br}\
             2- Refine the annotations using the tool.{br}\
             3- Export the the refined annotations as \"{refined_ann_filename}\" to \"{self.checkpoint_dir}\" directory.{br}\
             4- Press OK button once you are finished refining. "
@@ -290,6 +300,6 @@ class AnnotationToolkit:
             if is_error:
                 show_msgbox(self, msg, 'OK', 'error', True)
             else:
-                self.text_browser_signal.emit(msg)
+                self.text_browser_signal.emit(msg + '\n')
         else:
-            print(msg)
+            print(msg + '\n')

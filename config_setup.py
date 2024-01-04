@@ -1,40 +1,31 @@
+import json
 import os
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import (
-    QApplication, QDialog, QMainWindow, QMessageBox, QFileDialog
-)
+
+from PyQt5.QtWidgets import (QDialog, QFileDialog)
+
+from ui_files.advanced_conf_ui import Ui_Dialog as Advanced_Ui_Dialog
+from ui_files.confi_ui import Ui_Dialog
 from utils.parse_config import parse_model_config
 from utils.utils import show_msgbox
 
-from ui_files.confi_ui import Ui_Dialog
-from ui_files.advanced_conf_ui import Ui_Dialog as Advanced_Ui_Dialog
-import numpy as np
-import shutil
-import json
 
 class Advanced_ConfigUI(QDialog, Advanced_Ui_Dialog):
     def __init__(self, query_mode_list, parent=None):
         super().__init__(parent)
         self.setupUi(self)
-        
-        
-
-        
-
 
     def set_var(self, name, val):
         self.var_dict[name] = val
 
-        
+
 
 
 
 class ConfigUI(QDialog, Ui_Dialog):
-    _closed = pyqtSignal()
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
-        self.model_name_list = ['', 'yolov3-coco']
+        self.model_name_list = ['', 'pointpillar-kitti', 'yolov3-coco']
         self.data_format_list = ['', 'kitti', 'openlabel']
         self.query_mode_list = ['random', 'confidence_based']
         self.advanced_conf_var_dict = {'epochs':5, 'batch_size':32, 'subset_size':25, 'performance_thres':0.5, 'query_mode':'random'}
@@ -55,7 +46,7 @@ class ConfigUI(QDialog, Ui_Dialog):
         self.epochs.setValue(self.advanced_conf_var_dict['epochs'])
         self.batch_size.setValue(self.advanced_conf_var_dict['batch_size'])
         self.subset_size.setValue(self.advanced_conf_var_dict['subset_size'])
-        self.performance_thresh.setValue(self.advanced_conf_var_dict['performance_thres'] * 100)
+        self.performance_thresh.setValue(int(self.advanced_conf_var_dict['performance_thres'] * 100))
         
 
         self.model_name.activated.connect(self.process_model_name)
@@ -87,24 +78,29 @@ class ConfigUI(QDialog, Ui_Dialog):
         # print(val)
 
     def save_conf(self):
-        self.close()
-
-    def closeEvent(self, event):
-        self._closed.emit()
+        self.accept()
 
 
 
     def process_model_name(self):
         model_name = self.model_name.currentText()
         if model_name != "":
-            cfg = f'config/{model_name}.cfg'
-            hyperparams = parse_model_config(cfg).pop(0)
-            classes = hyperparams['classes'].split(',')
-            self.labels_to_classes.clear()
-            self.labels_to_classes.addItem('')
-            for c in classes:
-                self.labels_to_classes.addItem(c)
-            self.set_var('model_name', model_name)
+            if 'yolo' in model_name:
+                cfg = f'config/{model_name}.cfg'
+                hyperparams = parse_model_config(cfg).pop(0)
+                classes = hyperparams['classes'].split(',')
+                self.labels_to_classes.clear()
+                self.labels_to_classes.addItem('')
+                for c in classes:
+                    self.labels_to_classes.addItem(c)
+                self.set_var('model_name', model_name)
+            elif 'pointpillar' in model_name:
+                self.labels_to_classes.clear()
+                self.labels_to_classes.addItem('')
+                classes = ['Pedestrian', 'Cyclist', 'Car']
+                for c in classes:
+                    self.labels_to_classes.addItem(c)
+                self.set_var('model_name', model_name)
 
     def process_exp_name(self):
         exp_name = self.exp_name.text()
@@ -169,12 +165,5 @@ class ConfigUI(QDialog, Ui_Dialog):
                 opt = json.load(outfile)
             for k , v in opt.items():
                 self.var_dict[k]={'val':v, 'flag':True}
-            missed_keys = []
-            for k, v in self.var_dict.items():
-                if not v['flag']:
-                    missed_keys.append('"' + k + '"')
-            if len(missed_keys) > 0:
-                show_msgbox(self, f"The selected config file does not contain the following keys: {', '.join(missed_keys)}")
-            else:
-                self.close()
+            self.accept()
         

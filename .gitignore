@@ -10,6 +10,7 @@ data/coco/*
 data/kitti/*
 data/nuImage/*
 data/samples/*
+data/3D_kitti_tiny/training/velodyne_reduced
 data/coco.names
 data/kitti.names
 data/kitti.zip

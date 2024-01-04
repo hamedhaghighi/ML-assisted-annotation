@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1762</width>
-    <height>1070</height>
+    <width>1250</width>
+    <height>656</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,7 +17,33 @@
    <iconset>
     <normaloff>assets/main_window_icon.png</normaloff>assets/main_window_icon.png</iconset>
   </property>
+  <property name="styleSheet">
+   <string notr="true">background-color:#353535;
+color:white;
+</string>
+  </property>
   <widget class="QWidget" name="centralwidget">
+   <property name="styleSheet">
+    <string notr="true">QRadioButton::indicator, QCheckBox::indicator{
+background-color: white;
+}
+QRadioButton::indicator:checked, QCheckBox::indicator::checked {
+    background-color:       black;
+}
+QLineEdit, QTextEdit{
+    background-color: #505050;
+    color: #ffffff;
+}
+
+QRadioButton::indicator, QCheckBox::indicator
+{
+background-color: white;
+
+}
+QRadioButton::indicator:checked, QCheckBox::indicator::checked {
+    background-color:   #3497d5;
+}</string>
+   </property>
    <layout class="QGridLayout" name="gridLayout">
     <item row="0" column="1">
      <layout class="QHBoxLayout" name="horizontalLayout">
@@ -122,9 +148,15 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1762</width>
-     <height>31</height>
+     <width>1250</width>
+     <height>20</height>
     </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">background-color:#505050
+;
+color:white;
+</string>
    </property>
    <widget class="QMenu" name="menuFile">
     <property name="title">
