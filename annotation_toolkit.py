@@ -62,10 +62,12 @@ class AnnotationToolkit:
                 self.login_ui_cl.pushButton.clicked.connect(self.get_user_pass)
                 self.login_ui_cl.exec()
             else:
-                self.print_msg('Please enter your CVAT.ai account credential below:')
-                self.user = input('username:')
-                self.password = getpass()
-                # TODO: remove this line
+                # TODO: modify the lines below
+                self.user = 'hamedlakers'
+                self.password = 'HamedPas3w@rd'
+                # self.print_msg('Please enter your CVAT.ai account credential below:')
+                # self.user = input('username:')
+                # self.password = getpass()
             self.configuration = Configuration(host="https://app.cvat.ai",username=self.user, password=self.password)
             try:
                 ـ = ApiClient(self.configuration)

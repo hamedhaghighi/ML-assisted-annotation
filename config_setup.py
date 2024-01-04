@@ -55,7 +55,7 @@ class ConfigUI(QDialog, Ui_Dialog):
         self.epochs.setValue(self.advanced_conf_var_dict['epochs'])
         self.batch_size.setValue(self.advanced_conf_var_dict['batch_size'])
         self.subset_size.setValue(self.advanced_conf_var_dict['subset_size'])
-        self.performance_thresh.setValue(self.advanced_conf_var_dict['performance_thres'] * 100)
+        self.performance_thresh.setValue(int(self.advanced_conf_var_dict['performance_thres'] * 100))
         
 
         self.model_name.activated.connect(self.process_model_name)

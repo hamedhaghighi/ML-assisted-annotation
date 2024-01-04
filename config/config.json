@@ -4,7 +4,7 @@
 "data_format": "kitti", 
 "labels": ["Car","Truck", "Pedestrian"],
 "labels_to_classes": ["car", "truck", "person"],
-"annotation_tool":"cvat_manual",
+"annotation_tool":"cvat_api",
 "iou_thres": 0.5, 
 "conf_thres": 0.8, 
 "nms_thres": 0.4, 
