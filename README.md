@@ -19,7 +19,7 @@ ML-ADA is a semi-automatic data annotation tool that uses machine learning (ML) 
 <!-- 
 *Figure1. An overview of the ML-ADA pipeline* -->
 ## **Installation**
-The installation been tested on Ubuntu 22.04. 
+The installation has been tested on Ubuntu 22.04. 
 
 **Step 1.** Clone the GitHub repository:
 

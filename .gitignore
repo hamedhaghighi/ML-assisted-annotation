@@ -21,3 +21,5 @@ ops/*.pyd
 ops/*.pyd
 ops/*.so
 ops/pointpillars.egg-info/
+checkpoints/
+config
