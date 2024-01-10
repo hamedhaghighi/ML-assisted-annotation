@@ -19,6 +19,8 @@ ML-ADA is a semi-automatic data annotation tool that uses machine learning (ML) 
 <!-- 
 *Figure1. An overview of the ML-ADA pipeline* -->
 ## **Installation**
+The installation been tested on Ubuntu 22.04. 
+
 **Step 1.** Clone the GitHub repository:
 
 ```shell
@@ -49,7 +51,11 @@ If you encounter an error related to Qt platform plugin "xcb", reinstall the ope
 pip uninstall opencv-python-headless
 pip install opencv-python-headless
 ```
-
+**Step 5.** Compile ops package:
+```shell
+cd ops
+python setup.py develop
+```
 ## **Usage**
 
 Use the following steps to run the tool either on Docker or your platform:
