@@ -1,21 +1,16 @@
-import enum
 import glob
+import json
 import os
-import random
-from logging import root
+from collections import defaultdict
 
 import numpy as np
 import torch
 from nuimages import NuImages
-from nuimages.utils.utils import (annotation_name, get_font, mask_decode,
-                                  name_to_index_mapping)
 from PIL import Image
 from skimage.transform import resize
 from torch.utils.data import Dataset
 
 from utils.utils import m_resize, unpack_pre_annotation
-import json
-from collections import defaultdict
 
 
 def write_annotations(ind, data_dict, pre_annotation, pre_label_dir, labels, opt):
@@ -27,7 +22,7 @@ def write_annotations(ind, data_dict, pre_annotation, pre_label_dir, labels, opt
     # Image height and width after padding is removed
     unpad_h = opt.img_size - pad_y
     unpad_w = opt.img_size - pad_x
-    sep = '\\' if os.name =='nt' else '/'
+    sep = os.path.sep
     img_filename = img_path.split(sep)[-1]
     if opt.data_format == 'kitti':
         label_filename = img_filename.replace('jpeg', 'txt')
@@ -293,8 +288,6 @@ class Image2DAnnotationDataset(Dataset):
         self.images_path, self.labels_path = get_image_labels_path(root_dir, data_format)
         if Image2DAnnotationDataset.img_extension == '':
             Image2DAnnotationDataset.img_extension = self.images_path[0].split('.')[-1]
-        if len(self.images_path) == 0 and parent is not None:
-            parent.exit_(1, f'No data found in {root_dir}')
         self.sep = os.path.sep
         if labelled_filenames is not None:
             self.images_path = [img for img in self.images_path if img.split(self.sep)[-1].split('.')[0] not in  labelled_filenames]

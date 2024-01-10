@@ -1,7 +1,8 @@
-import pdb
+
 import numpy as np
 import torch
-from models.utils import limit_period, iou2d_nearest
+
+from models.utils import iou2d_nearest, limit_period
 
 
 class Anchors():
@@ -31,7 +32,7 @@ class Anchors():
         z_centers = z_centers[:1] + z_shift  # (1, )
 
         # [feature_map_size[1], feature_map_size[0], 1, 2] * 4
-        meshgrids = torch.meshgrid(x_centers, y_centers, z_centers, rotations)
+        meshgrids = torch.meshgrid(x_centers, y_centers, z_centers, rotations, indexing='ij')
         meshgrids = list(meshgrids)
         for i in range(len(meshgrids)):
             meshgrids[i] = meshgrids[i][..., None] # [feature_map_size[1], feature_map_size[0], 1, 2, 1]

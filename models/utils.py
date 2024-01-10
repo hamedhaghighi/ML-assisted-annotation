@@ -1,12 +1,11 @@
 import copy
+import random
+
 import numba
 import numpy as np
-import random
 import torch
-import pdb
-from ops.iou3d_module import boxes_overlap_bev, boxes_iou_bev
 
-
+from ops.iou3d_module import boxes_iou_bev, boxes_overlap_bev
 
 
 def get_score_thresholds(tp_scores, total_num_valid_gt, num_sample_pts=41):

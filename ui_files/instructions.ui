@@ -17,6 +17,11 @@
    <iconset>
     <normaloff>../assets/info-icon.png</normaloff>../assets/info-icon.png</iconset>
   </property>
+  <property name="styleSheet">
+   <string notr="true">background-color:#353535;
+color:white;
+</string>
+  </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="QLabel" name="label">

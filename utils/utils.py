@@ -3,6 +3,7 @@ from __future__ import division
 import datetime
 import math
 import os
+import pickle
 import random
 import time
 
@@ -12,10 +13,8 @@ import numpy as np
 import torch
 from matplotlib.ticker import NullLocator
 from PIL import Image
-from torch.utils.tensorboard import SummaryWriter
 from PyQt5.QtWidgets import QMessageBox
-import pickle
-
+from torch.utils.tensorboard import SummaryWriter
 
 
 class Log():
@@ -105,7 +104,29 @@ class Visualizer():
     def __getattr__(self, name):
         return getattr(self.vis, name)
 
-
+def check_opt(opt, print_fn):
+    resp = True
+    conf_var_names = set(['exp_name', 'model_name', 'data_format', 'labels', 'labels_to_classes', 'use_cuda', 'data_dir', 'annotation_tool'])
+    missed_keys = list(set(conf_var_names).difference(opt.keys()))
+    if len(missed_keys) > 0:
+        resp = False
+        print_fn(f"The selected config file does not contain the following keys: {', '.join(missed_keys)}", is_error=True)
+    is_two_d = 'yolo' in opt['model_name']
+    data_dir = opt['data_dir']
+    if is_two_d and opt['data_format'] == 'kitti' and not os.path.exists(os.path.join(opt['data_dir'],'image_2')):
+        resp = False
+        print_fn(f'The path {data_dir} does not contain image_2. Please check the structure of kitti 2D object detection dataset.', is_error=True)
+    if not is_two_d and (not os.path.exists(os.path.join(opt['data_dir'],'velodyne')) or not os.path.exists(os.path.join(data_dir,'calib'))):
+        resp = False
+        print_fn(f'The path {data_dir} does not contain velodyne or calib. Please check the structure of kitti 3D object detection dataset.', is_error=True)
+    if not is_two_d and opt['data_format'] != 'kitti':
+        resp = False
+        print_fn(f'Only kitti data format is supported for 3D object detection.', is_error=True)
+    if not is_two_d and not opt['use_cuda']:
+        resp = False
+        print_fn(f'The cuda should be enabled for 3D object detection.', is_error=True)
+    return resp
+    
 def load_classes(path):
     """
     Loads class labels at 'path'
@@ -479,6 +500,11 @@ def set_device(pyt_element, is_cuda):
 def show_msgbox(parent, msg, button=None, type='info', is_gui=True):
     if is_gui:
         msgBox = QMessageBox()
+        msgBox.setStyleSheet(
+            "QMessageBox { background-color: #353535;}"
+            "QMessageBox QLabel { color: white; }"
+            "QMessageBox QPushButton { background-color: #505050; color: white; }"
+        )
         icon = QMessageBox.Information if type=='info' else QMessageBox.Critical
         msgBox.setIcon( icon )
         msgBox.setText(msg)

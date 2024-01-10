@@ -1,12 +1,14 @@
 import copy
-import numba
-import numpy as np
-import random
-import torch
-import pdb
 import os
 import pickle
-from ops.iou3d_module import boxes_overlap_bev, boxes_iou_bev
+import random
+
+import numba
+import numpy as np
+import torch
+
+from ops.iou3d_module import boxes_iou_bev, boxes_overlap_bev
+
 
 def setup_seed(seed=0, deterministic = True):
     random.seed(seed)
@@ -838,6 +840,7 @@ def write_label(result, file_path, suffix='.txt'):
     file_path: str
     '''
     assert os.path.splitext(file_path)[1] == suffix
+    result = {k: np.round(v, 2) if k != 'name' else v for k , v in result.items()}
     name, truncated, occluded, alpha, bbox, dimensions, location, rotation_y, score = \
         result['name'], result['truncated'], result['occluded'], result['alpha'], \
         result['bbox'], result['dimensions'], result['location'], result['rotation_y'], \
@@ -846,7 +849,8 @@ def write_label(result, file_path, suffix='.txt'):
     with open(file_path, 'w') as f:
         for i in range(len(name)):
             bbox_str = ' '.join(map(str, bbox[i]))
-            hwl = ' '.join(map(str, dimensions[i]))
+            hwl = ' '.join(map(str, dimensions[i][[1, 2, 0]]))
             xyz = ' '.join(map(str, location[i]))
-            line = f'{name[i]} {truncated[i]} {occluded[i]} {alpha[i]} {bbox_str} {hwl} {xyz} {rotation_y[i]} {score[i]}\n'
+            # line = f'{name[i]} {truncated[i]} {occluded[i]} {alpha[i]} {bbox_str} {hwl} {xyz} {rotation_y[i]} {score[i]}\n'
+            line = f'{name[i]} {float(truncated[i])} {occluded[i]} {alpha[i]} {bbox_str} {hwl} {xyz} {rotation_y[i]}\n'
             f.writelines(line)

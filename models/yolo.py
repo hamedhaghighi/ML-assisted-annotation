@@ -1,22 +1,16 @@
 from __future__ import division
 
-from ast import Num
 from collections import defaultdict
 
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import tqdm
 import torch.nn as nn
-import torch.nn.functional as F
-from PIL import Image
 from torch.autograd import Variable
 
 from utils.parse_config import *
-from utils.utils import build_targets
-from utils.utils import (bbox_iou_numpy, compute_ap,
+from utils.utils import (bbox_iou_numpy, build_targets, compute_ap,
                          non_max_suppression, set_device)
+
 
 def create_modules(module_defs, img_size):
     """
@@ -408,8 +402,8 @@ class Darknet(nn.Module):
         outputs = non_max_suppression(outputs, 80, classes_to_labels, conf_thres=self.opt.conf_thres, nms_thres=self.opt.nms_thres)
         return outputs
 
-    def get_bbox_scores(self, data_dict):
-        outputs = self.get_output(data_dict)
+    def get_bbox_scores(self, data_dict, classes_to_labels=None):
+        outputs = self.get_output(data_dict, classes_to_labels)
         return [o[:, 4].cpu().numpy().mean() for o in outputs if o is not None] 
 
     def m_train(self, data_dict, optimizer, labels_to_classes, vis, len_dataloader, epoch, batch_i, print_msg_fn, total_steps):

@@ -1,19 +1,8 @@
-import enum
 import glob
-import os
-import random
-from logging import root
-
-import numpy as np
-import torch
-from nuimages import NuImages
-from nuimages.utils.utils import (annotation_name, get_font, mask_decode,
-                                  name_to_index_mapping)
-from PIL import Image
-from skimage.transform import resize
-
-from utils.utils import m_resize
 import json
+import os
+
+
 
 data_dir = "./data/kitti_tiny/training/"
 label_list = sorted(glob.glob(data_dir + 'label_2/*.txt')) 

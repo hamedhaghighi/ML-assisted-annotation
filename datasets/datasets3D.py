@@ -1,26 +1,163 @@
-import numpy as np
-import os
 import glob
+import os
+import sys
+import xml.etree.ElementTree as ET
+
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-import sys
 BASE = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(BASE))
 
-from datasets.utils import  read_points, bbox_camera2lidar
-from datasets.data_aug import point_range_filter
-from tqdm import tqdm, trange
 import cv2
-from datasets.utils import read_points, write_points, read_calib, read_label, \
-    write_pickle, remove_outside_points, get_points_num_in_bbox, \
-    points_in_bboxes_v2, keep_bbox_from_image_range, keep_bbox_from_lidar_range, write_label
+
+from datasets.data_aug import point_range_filter
+from datasets.utils import (bbox3d2corners_camera, bbox_camera2lidar,
+                            bbox_lidar2camera, get_points_num_in_bbox,
+                            keep_bbox_from_image_range,
+                            keep_bbox_from_lidar_range, points_camera2image,
+                            read_calib, read_label, read_points,
+                            remove_outside_points, write_label, write_points)
 
 CUR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(CUR)
 pcd_limit_range = np.array([0, -40, -3, 70.4, 40, 0.0], dtype=np.float32)
 
-def write_annotations(j, data_dict, result, pre_label_dir, label_names, opt=None):
+def bbox3d2camera2d(lidar_bboxes, image_shape, tr_velo_to_cam, r0_rect, P2):
+    '''
+    lidar_bboxes: (N, 7)
+    return bboxes_2d: (N, 4)
+    '''
+    h, w = image_shape
+    camera_bboxes = bbox_lidar2camera(lidar_bboxes, tr_velo_to_cam, r0_rect) # (n, 7)
+    alpha = camera_bboxes[:, 6] - np.arctan2(camera_bboxes[:, 0], camera_bboxes[:, 2])
+    bboxes_points = bbox3d2corners_camera(camera_bboxes) # (n, 8, 3)
+    image_points = points_camera2image(bboxes_points, P2) # (n, 8, 2)
+    image_x1y1 = np.min(image_points, axis=1) # (n, 2)
+    image_x1y1 = np.maximum(image_x1y1, 0)
+    image_x2y2 = np.max(image_points, axis=1) # (n, 2)
+    image_x2y2 = np.minimum(image_x2y2, [w, h])
+    bboxes2d = np.concatenate([image_x1y1, image_x2y2], axis=-1) # (n, 4)
+
+    # keep_flag = (image_x1y1[:, 0] < w) & (image_x1y1[:, 1] < h) & (image_x2y2[:, 0] > 0) & (image_x2y2[:, 1] > 0)
+    return bboxes2d, alpha
+
+def create_kitti_xml(xml_path, annotations, calib_dict):
+
+    root = ET.Element("boost_serialization", version="9", signature="serialization::archive")
+    tracklets = ET.SubElement(root, "tracklets", version="0", tracking_level="0", class_id="0")
+
+    count_elem = ET.SubElement(tracklets, "count")
+    # count_elem.text = str(len(annotations))
+
+    item_version_elem = ET.SubElement(tracklets, "item_version")
+    item_version_elem.text = "1"
+    total_counts = 0
+    for id ,annotation in annotations.items():
+        calib_info = calib_dict[id]
+        tr_velo_to_cam = calib_info['Tr_velo_to_cam'].astype(np.float32)
+        r0_rect = calib_info['R0_rect'].astype(np.float32)
+        gt_bboxes_3d = np.concatenate([annotation['location'], annotation['dimensions'], annotation['rotation_y'][:, None]], axis=1).astype(np.float32)
+        gt_bboxes_3d = bbox_camera2lidar(gt_bboxes_3d, tr_velo_to_cam, r0_rect)
+        for j in range(len(annotation['name'])):
+            total_counts += 1
+            item_elem = ET.SubElement(tracklets, "item", version="1", tracking_level="0", class_id="1")
+
+            ET.SubElement(item_elem, "objectType").text = annotation['name'][j]
+            ET.SubElement(item_elem, "h").text = str(gt_bboxes_3d[j][3])
+            ET.SubElement(item_elem, "w").text = str(gt_bboxes_3d[j][4])
+            ET.SubElement(item_elem, "l").text = str(gt_bboxes_3d[j][5])
+            ET.SubElement(item_elem, "first_frame").text = str(int(id))
+            poses_elem = ET.SubElement(item_elem, "poses")
+            poses_count_elem = ET.SubElement(poses_elem, "count")
+            poses_count_elem.text = "1"
+            poses_item_version_elem = ET.SubElement(poses_elem, "item_version")
+            poses_item_version_elem.text = "0"
+            pose_elem = ET.SubElement(poses_elem, "item", version="1", tracking_level="0", class_id="3")
+            ET.SubElement(pose_elem, "tx").text = str(gt_bboxes_3d[j][0])
+            ET.SubElement(pose_elem, "ty").text = str(gt_bboxes_3d[j][1])
+            ET.SubElement(pose_elem, "tz").text = str(gt_bboxes_3d[j][2] + gt_bboxes_3d[j][5]/2)
+            ET.SubElement(pose_elem, "rx").text = "0.0" 
+            ET.SubElement(pose_elem, "ry").text =  "0.0"  # Assuming rotation_y is not available in annotations
+            ET.SubElement(pose_elem, "rz").text = str(np.pi * 0.5 - gt_bboxes_3d[j][6])  # Assuming rotation_z is not available in annotations
+            ET.SubElement(pose_elem, "state").text = "2"
+            ET.SubElement(pose_elem, "occlusion").text = str(annotation['occluded'][j])
+            # ET.SubElement(pose_elem, "occlusion").text = "0"
+            ET.SubElement(pose_elem, "occlusion_kf").text = "0"
+            ET.SubElement(pose_elem, "truncation").text = str(int(annotation['truncated'][j]))
+            ET.SubElement(pose_elem, "amt_occlusion").text = "-1"
+            ET.SubElement(pose_elem, "amt_border_l").text = "-1"
+            ET.SubElement(pose_elem, "amt_border_r").text = "-1"
+            ET.SubElement(pose_elem, "amt_occlusion_kf").text = "-1"
+            ET.SubElement(pose_elem, "amt_border_kf").text = "-1"
+            ET.SubElement(item_elem, "finished").text = "1"
+
+    count_elem.text = str(total_counts)
+    tree = ET.ElementTree(root)
+    tree.write(xml_path, encoding="UTF-8", xml_declaration=True)
+
+def read_kitti_xml(xml_path, data_root_dir):
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+
+    annotations = {}
+    for item in root.findall(".//item"):
+        if item.find("first_frame") is not None:
+            id = int(item.find("first_frame").text)
+            name = item.find("objectType").text
+            dimensions = [
+                float(item.find("h").text),
+                float(item.find("w").text),
+                float(item.find("l").text)
+            ]
+            location_elem = item.find(".//poses/item")
+            location = [
+                float(location_elem.find("tx").text),
+                float(location_elem.find("ty").text),
+                float(location_elem.find("tz").text) - dimensions[2]/2
+            ]
+            rotation_y = np.pi * 0.5 - float(location_elem.find("rz").text)
+            occluded = int(location_elem.find("occlusion").text)
+            truncated = int(location_elem.find("truncation").text)
+
+            if id not in annotations:
+                annotations[id] = {'name': [], 'dimensions': [], 'location': [], 'rotation_y': [], 'occluded': [], 'truncated': [], 'alpha':[], 'score':[], 'bbox':[]}
+
+            annotations[id]['name'].append(name)
+            annotations[id]['dimensions'].append(dimensions)
+            annotations[id]['location'].append(location)
+            annotations[id]['rotation_y'].append(rotation_y)
+            annotations[id]['occluded'].append(occluded)
+            annotations[id]['truncated'].append(truncated)
+            annotations[id]['alpha'].append(0.0)
+            annotations[id]['score'].append(0.0)
+            annotations[id]['bbox'].append([0.0, 0.0, 0.0, 0.0])
+
+    for k, v in annotations.items():
+        annotations[k] = {k1 : np.array(v1) for k1 , v1 in v.items()}
+    for k , v in annotations.items():
+        gt_bboxes = np.concatenate([v['location'], v['dimensions'], v['rotation_y'][:, None]], axis=1).astype(np.float32)
+        calib_dict = read_calib(os.path.join(data_root_dir, 'calib', f'{k:06d}.txt'))
+        img = cv2.imread(os.path.join(data_root_dir, 'image_2', f'{k:06d}.png'))
+        bboxes_2d, alpha = bbox3d2camera2d(gt_bboxes, img.shape[:2], calib_dict['Tr_velo_to_cam'], calib_dict['R0_rect'], calib_dict['P2'])
+        annotations[k]['bbox'] = bboxes_2d
+        annotations[k]['alpha'] = alpha
+        gt_bboxes = bbox_lidar2camera(gt_bboxes, calib_dict['Tr_velo_to_cam'], calib_dict['R0_rect'])
+        annotations[k]['location'] = gt_bboxes[:, :3]
+        annotations[k]['dimensions'] = gt_bboxes[:, 3:6]
+        annotations[k]['rotation_y'] = gt_bboxes[:, -1]
+    return annotations
+
+    
+
+def convert_kitti_xml_to_txt(xml_path, txt_folder, data_root_dir):
+
+    annotations_dict = read_kitti_xml(xml_path, data_root_dir)
+    for idx, annotations in annotations_dict.items():
+        write_label(annotations, os.path.join(txt_folder, f'{idx:06d}.txt'))
+
+def format_annotations(j, data_dict, result, label_names):
     format_result = {
         'name': [],
         'truncated': [],
@@ -40,13 +177,21 @@ def write_annotations(j, data_dict, result, pre_label_dir, label_names, opt=None
     idx = data_dict['batched_img_info'][0]['image_idx']
     result_filter = keep_bbox_from_image_range(result, tr_velo_to_cam, r0_rect, P2, image_shape)
     result_filter = keep_bbox_from_lidar_range(result_filter, pcd_limit_range)
+    if len(result_filter['labels']) == 0:
+        result_filter = {
+            'lidar_bboxes': np.zeros((1, 7)),
+            'labels': np.zeros(1, dtype=np.int32) + -1,
+            'scores': np.zeros(1),
+            'bboxes2d': np.zeros((1, 4)),
+            'camera_bboxes': np.zeros((1, 7))
+            }
 
     lidar_bboxes = result_filter['lidar_bboxes']
     labels, scores = result_filter['labels'], result_filter['scores']
     bboxes2d, camera_bboxes = result_filter['bboxes2d'], result_filter['camera_bboxes']
-    for lidar_bbox, label, score, bbox2d, camera_bbox in \
+    for _, label, score, bbox2d, camera_bbox in \
         zip(lidar_bboxes, labels, scores, bboxes2d, camera_bboxes):
-        format_result['name'].append(label_names[label])
+        format_result['name'].append(label_names[label] if label != -1 else 'DontCare')
         format_result['truncated'].append(0.0)
         format_result['occluded'].append(0)
         alpha = camera_bbox[6] - np.arctan2(camera_bbox[0], camera_bbox[2])
@@ -56,8 +201,6 @@ def write_annotations(j, data_dict, result, pre_label_dir, label_names, opt=None
         format_result['location'].append(camera_bbox[:3])
         format_result['rotation_y'].append(camera_bbox[6])
         format_result['score'].append(score)
-    
-    write_label(format_result, os.path.join(pre_label_dir, f'{idx:06d}.txt'))
     return format_result
     
 def collate_fn(list_data):
@@ -135,10 +278,10 @@ class BaseSampler():
 class Image3DAnnotationDataset(Dataset):
     def __init__(self, root_dir, labels, labels_to_classes, lidars_root_dir=None, labelled_filenames=None, parent=None):
         self.sep = os.path.sep
-        self.lidars_path = sorted(glob.glob(f'{root_dir}/velodyne/*.*'))
-        self.labels_path = sorted(glob.glob(f'{root_dir}/label_2/*.*'))
-        self.images_path = sorted(glob.glob(f'{root_dir}/image_2/*.*' ))
-        self.calibs_path = sorted(glob.glob(f'{root_dir}/calib/*.*' ))
+        self.lidars_path = sorted(glob.glob(os.path.join(root_dir, 'velodyne', '*.bin*')))
+        self.labels_path = sorted(glob.glob(os.path.join(root_dir,'label_2', '*.txt*')))
+        self.images_path = sorted(glob.glob(os.path.join(root_dir, 'image_2', '*.png*')))
+        self.calibs_path = sorted(glob.glob(os.path.join(root_dir, 'calib', '*.txt*')))
         if len(self.lidars_path) == 0  and len(self.labels_path) == 0 and parent is not None:
             parent.exit_(1, f'No data found in {root_dir}')
         if labelled_filenames is not None:
@@ -205,66 +348,11 @@ class Image3DAnnotationDataset(Dataset):
                     name=annotation_dict['name'])
                 cur_info_dict['annos'] = annotation_dict
 
-                # if db:
-                #     indices, n_total_bbox, n_valid_bbox, bboxes_lidar, name = \
-                #         points_in_bboxes_v2data_infosnnotation_dict['dimensions'].astype(np.float32),
-                #             location=annotation_dict['location'].astype(np.float32),
-                #             rotation_y=annotation_dict['rotation_y'].astype(np.float32),
-                #             name=annotation_dict['name']    
-                #         )
-                #     for j in range(n_valid_bbox):
-                #         db_points = lidar_points[indices[:, j]]
-                #         db_points[:, :3] -= bboxes_lidar[j, :3]
-                #         db_points_saved_name = os.path.join(db_points_saved_path, f'{int(id)}_{name[j]}_{j}.bin')
-                #         write_points(db_points, db_points_saved_name)
-
-                #         db_info={
-                #             'name': name[j],
-                #             'path': os.path.join(os.path.basename(db_points_saved_path), f'{int(id)}_{name[j]}_{j}.bin'),
-                #             'box3d_lidar': bboxes_lidar[j],
-                #             'difficulty': annotation_dict['difficulty'][j], 
-                #             'num_points_in_gt': len(db_points), 
-                #         }
-                #         if name[j] not in kitti_dbinfos_train:
-                #             kitti_dbinfos_train[name[j]] = [db_info]
-                #         else:
-                #             kitti_dbinfos_train[name[j]].append(db_info)
             
             kitti_infos_dict[int(id)] = cur_info_dict
-        # writing the dict
-        # saved_path = os.path.join(root_dir, f'{prefix}_infos_{data_type}.pkl')
-        # write_pickle(kitti_infos_dict, saved_path)
-        # if db:
-        #     saved_db_path = os.path.join(root_dir, f'{prefix}_dbinfos_train.pkl')
-        #     write_pickle(kitti_dbinfos_train, saved_db_path)
-
 
         self.data_infos = kitti_infos_dict
         self.sorted_ids = list(self.data_infos.keys())
-        # db_infos = read_pickle(os.path.join(root_dir, 'kitti_dbinfos_train.pkl'))
-        # db_infos = self.filter_db(db_infos)
-        # db_sampler = {}
-        # for cat_name in self.CLASSES:
-        #     db_sampler[cat_name] = BaseSampler(db_infos[cat_name], shuffle=True)
-        # self.data_aug_config=dict(
-        #     db_sampler=dict(
-        #         db_sampler=db_sampler,
-        #         sample_groups=dict(Car=15, Pedestrian=10, Cyclist=10)
-        #         ),
-        #     object_noise=dict(
-        #         num_try=100,
-        #         translation_std=[0.25, 0.25, 0.25],
-        #         rot_range=[-0.15707963267, 0.15707963267]
-        #         ),
-        #     random_flip_ratio=0.5,
-        #     global_rot_scale_trans=dict(
-        #         rot_range=[-0.78539816, 0.78539816],
-        #         scale_ratio_range=[0.95, 1.05],
-        #         translation_std=[0, 0, 0]
-        #         ), 
-        #     point_range_filter=[0, -39.68, -3, 69.12, 39.68, 1],
-        #     object_range_filter=[0, -39.68, -3, 69.12, 39.68, 1]             
-        # )
 
     def filter_labels(self, annos_info):
         keep_ids = [i for i, name in enumerate(annos_info['name']) if name in self.labels and self.labels_to_classes[self.label_to_i[name]] != -1]
@@ -291,7 +379,6 @@ class Image3DAnnotationDataset(Dataset):
             data_info['image'], data_info['calib'], data_info['annos']
     
         # point cloud input
-        # TODO you may need to change the line below
         velodyne_path = data_info['velodyne_path'].replace('velodyne', 'velodyne_reduced')
         # velodyne_path = data_info['velodyne_path']
         pts_path = os.path.join(self.root_dir if self.lidars_root_dir is None else self.lidars_root_dir, velodyne_path)

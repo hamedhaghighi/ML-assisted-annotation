@@ -13,6 +13,11 @@
   <property name="windowTitle">
    <string>Login to CVAT.ai Account</string>
   </property>
+  <property name="styleSheet">
+   <string notr="true">background-color:#353535;
+color:white;
+</string>
+  </property>
   <widget class="QWidget" name="formLayoutWidget">
    <property name="geometry">
     <rect>

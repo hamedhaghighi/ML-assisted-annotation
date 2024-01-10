@@ -13,6 +13,11 @@
   <property name="windowTitle">
    <string>Dialog</string>
   </property>
+  <property name="styleSheet">
+   <string notr="true">background-color:#353535;
+color:white;
+</string>
+  </property>
   <layout class="QFormLayout" name="formLayout">
    <item row="0" column="0">
     <layout class="QGridLayout" name="gridLayout">
