@@ -145,13 +145,13 @@ class MLADA(*inhertance_classes):
         with open(f"{os.path.join(opt.checkpoint_dir, 'config.json')}", 'w') as f:
             json.dump(opt_dict, f)
         self.print_msg(f"Config file saved in {os.path.join(opt.checkpoint_dir, 'config.json')}")
-
         weights_path = os.path.join(f'{opt.checkpoint_dir}','best.weights') if resume else os.path.join(f'checkpoints',f'{opt.model_name}.weights')
         if not os.path.exists(weights_path):
             if resume:
                 self.exit_(1, f'Cannot find {weights_path}')
             self.print_msg(f'Downloading the {opt.model_name} weights ...')
-            wget.download('https://pjreddie.com/media/files/yolov3.weights', weights_path)
+            weights_url = 'https://pjreddie.com/media/files/yolov3.weights' if self.is_two_d else 'https://livewarwickac-my.sharepoint.com/:u:/g/personal/u2039803_live_warwick_ac_uk/EeyHT4eBIQJAvsAwtxIrfN0BSak10rUUNgm49SzrhlKv0A?e=iTbyGM'
+            wget.download(weights_url, weights_path)
         if not (resume and os.path.exists(opt.checkpoint_dir)):
             shutil.copy(weights_path, os.path.join(f'{opt.checkpoint_dir}','best.weights'))
         self.logger = Log(opt, resume)
@@ -652,8 +652,7 @@ class MLADA(*inhertance_classes):
     def run_loop(self):
         self.print_manual()
         while True:
-            # cmd = input('ML-ADA>')
-            cmd = 'ns'
+            cmd = input('ML-ADA>')
             if cmd == 'ns':
                 self.annotate_next_subset()
             elif cmd == 'vs':

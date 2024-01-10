@@ -2,7 +2,8 @@
 checkpoints/
 kitti_tiny.zip
 kitti_tiny/
-checkpoints/
+checkpoints/*
+!checkpoints/pointpillar-kitti.weights
 utils/__pycache__/utils.cpython-37.pyc
 weights/
 __pycache__/
@@ -19,4 +20,7 @@ test_data.txt
 loss data.txt
 checkpoints_2/
 config/
-
+ops/build/lib.win-amd64-3.7/
+ops/build/temp.win-amd64-3.7/
+ops/iou3d_op.cp37-win_amd64.pyd
+ops/voxel_op.cp37-win_amd64.pyd

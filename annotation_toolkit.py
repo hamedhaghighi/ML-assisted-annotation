@@ -14,6 +14,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
 
 from ui_files.instruction_ui import Ui_Dialog
 from ui_files.login import Ui_Login as login_ui
@@ -174,7 +175,7 @@ class AnnotationToolkit:
                     if self.driver is None:
                         options = webdriver.ChromeOptions()
                         options.add_argument("--start-maximized")
-                        self.driver = webdriver.Chrome(options=options)
+                        self.driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
                         self.driver.get(url)
                         WebDriverWait(self.driver, 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="credential"]')))
                         username = self.driver.find_element(By.XPATH, '//*[@id="credential"]')
