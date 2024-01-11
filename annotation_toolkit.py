@@ -175,10 +175,7 @@ class AnnotationToolkit:
                     if self.driver is None:
                         options = webdriver.ChromeOptions()
                         options.add_argument("--start-maximized")
-                        if os.name == "nt":
-                            self.driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
-                        elif os.name == "posix":
-                            self.driver = webdriver.Chrome(options=options)
+                        self.driver = webdriver.Chrome(options=options)
                         self.driver.get(url)
                         WebDriverWait(self.driver, 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="credential"]')))
                         username = self.driver.find_element(By.XPATH, '//*[@id="credential"]')
