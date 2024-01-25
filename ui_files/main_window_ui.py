@@ -16,7 +16,7 @@ class Ui_MainWindow(object):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(1250, 656)
         icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("ui_files/assets/main_window_icon.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon.addPixmap(QtGui.QPixmap("ui_files/../assets/main_window_icon.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         MainWindow.setWindowIcon(icon)
         MainWindow.setStyleSheet("background-color:#353535;\n"
 "color:white;\n"
