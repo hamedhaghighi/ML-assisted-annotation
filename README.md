@@ -1,4 +1,4 @@
-# Machine Learning-Assisted Data Annotation (ML-ADA) for 3D/2D Object Detection with Fine-tuning In the Loop
+# :toolbox: Machine Learning-Assisted Data Annotation (ML-ADA) for 3D/2D Object Detection with Fine-tuning In the Loop
 ML-ADA is a semi-automatic data annotation tool that uses machine learning (ML) models to pre-annotate data. Simultaneously, it actively fine-tunes the models with the refined annotations the user provides. Currently, ML-ADA supports:
 
 - 3D/2D object detection
@@ -10,7 +10,7 @@ ML-ADA is a semi-automatic data annotation tool that uses machine learning (ML) 
 
 ![pipeline](assets/pipeline-3.png)
 \*Manual annotation tool is an external tool and ML-ADA wraps it.
-## **Table of Contents**
+## :bookmark_tabs: **Table of Contents**
 - [Installation](#installation)
 - [Usage](#usage)
 - [Configuration Guide](#configuration-guide)
@@ -18,7 +18,7 @@ ML-ADA is a semi-automatic data annotation tool that uses machine learning (ML) 
  
 <!-- 
 *Figure1. An overview of the ML-ADA pipeline* -->
-## **Installation**
+## :gear: **Installation**
 The installation has been tested on Ubuntu 22.04. 
 
 **Step 1.** Clone the GitHub repository:
@@ -56,7 +56,7 @@ pip install opencv-python-headless
 cd ops
 python setup.py develop
 ```
-## **Usage**
+## :rocket: **Usage**
 
 Use the following steps to run the tool either on Docker or your platform:
 
@@ -84,7 +84,7 @@ python ML-ADA.py --cfg CONFIG_PATH
 ```
 In the case of GUI, either manually set the parameters or browse the config files using the "Import Config" button on the opened window.
 
-## **Configuration Guide**
+## :wrench: **Configuration Guide**
 
 Following is the description of each parameter in the JSON configuration file:
 
@@ -151,7 +151,7 @@ The rest of the parameters in the config file are for advanced users and you may
 | background_training | true to enable the re-training to be run in the background,  false to disable it |
 | n_cpu | number of CPU threads to be used in reading the dataset from the drive, e.g. 4 |
 
-## **Credit**
+## :books: **Credit**
 
 Yolov3 implementation from [packyan](https://github.com/packyan/PyTorch-YOLOv3-kitti)
 
