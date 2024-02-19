@@ -238,4 +238,4 @@ dependencies:
     - wmctrl==0.5
     - wsproto==1.2.0
     - zipp==3.17.0
-prefix: /home/hamed/anaconda3/envs/3Dobj
+    - webdriver-manager==4.0.1
