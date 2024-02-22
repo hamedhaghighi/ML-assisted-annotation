@@ -1,11 +1,12 @@
-# :toolbox: Machine Learning-Assisted Data Annotation (ML-ADA) for 3D/2D Object Detection with Fine-tuning In the Loop
+# :toolbox: Machine Learning-Assisted Data Annotation (ML-ADA) for 3D/2D Object Detection with Active Learning
 ML-ADA is a semi-automatic data annotation tool that uses machine learning (ML) models to pre-annotate data. Simultaneously, it actively fine-tunes the models with the refined annotations the user provides. Currently, ML-ADA supports:
 
-- 3D/2D object detection
-- confidence-based sampling strategy for active learning
-- Kitti and OpenLabel data annotation formats
-- Yolov3 and Pointpillar networks as object detectors
-- API-based integration with [CVAT.ai](https://app.cvat.ai).
+- :mag:	3D/2D object detection
+- :dart: confidence-based sampling strategy for active learning
+- :card_file_box: Kitti and OpenLabel data annotation formats
+- :eyes: Yolov3 and Pointpillar networks as object detectors
+- :arrows_counterclockwise:	API-based integration with [CVAT.ai](https://app.cvat.ai).
+
 
 
 ![pipeline](assets/pipeline.gif)
