@@ -4,12 +4,12 @@ ML-ADA is a semi-automatic data annotation tool that uses machine learning (ML) 
 - 3D/2D object detection
 - confidence-based sampling strategy for active learning
 - Kitti and OpenLabel data annotation formats
-- Yolov3 and Pointpillar networks as 2D and 3D object detectors
+- Yolov3 and Pointpillar networks as object detectors
 - API-based integration with [CVAT.ai](https://app.cvat.ai).
 
 
-![pipeline](assets/pipeline-3.png)
-\*Manual annotation tool is an external tool and ML-ADA wraps it.
+![pipeline](assets/pipeline.gif)
+
 ## :bookmark_tabs: **Table of Contents**
 - [Installation](#installation)
 - [Usage](#usage)
