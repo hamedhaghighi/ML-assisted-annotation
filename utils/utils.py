@@ -13,7 +13,7 @@ import torch
 from matplotlib.ticker import NullLocator
 from PIL import Image
 from torch.utils.tensorboard import SummaryWriter
-from PyQt5.QtWidgets import QMessageBox
+# from PyQt5.QtWidgets import QMessageBox
 import pickle
 
 
