@@ -19,3 +19,4 @@ loss data.txt
 checkpoints_2/
 config/
 data/3D_kitti_tiny/*
+ops
