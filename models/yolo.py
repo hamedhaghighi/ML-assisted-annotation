@@ -8,8 +8,13 @@ import torch.nn as nn
 from torch.autograd import Variable
 
 from utils.parse_config import *
-from utils.utils import (bbox_iou_numpy, build_targets, compute_ap,
-                         non_max_suppression, set_device)
+from utils.utils import (
+    bbox_iou_numpy,
+    build_targets,
+    compute_ap,
+    non_max_suppression,
+    set_device,
+)
 
 
 def create_modules(module_defs, img_size):
@@ -39,9 +44,7 @@ def create_modules(module_defs, img_size):
                 ),
             )
             if bn:
-                modules.add_module(
-                    "batch_norm_%d" %
-                    i, nn.BatchNorm2d(filters))
+                modules.add_module("batch_norm_%d" % i, nn.BatchNorm2d(filters))
             if module_def["activation"] == "leaky":
                 modules.add_module("leaky_%d" % i, nn.LeakyReLU(0.1))
 
@@ -60,17 +63,16 @@ def create_modules(module_defs, img_size):
 
         elif module_def["type"] == "upsample":
             upsample = nn.Upsample(
-                scale_factor=int(
-                    module_def["stride"]),
-                mode="nearest")
+                scale_factor=int(module_def["stride"]), mode="nearest"
+            )
             modules.add_module("upsample_%d" % i, upsample)
 
         elif module_def["type"] == "route":
             layers = [int(x) for x in module_def["layers"].split(",")]
-            #filters = sum([output_filters[layer_i] for layer_i in layers])
+            # filters = sum([output_filters[layer_i] for layer_i in layers])
             filters = 0
             for layer_i in layers:
-                if (layer_i > 0):
+                if layer_i > 0:
                     filters += output_filters[layer_i + 1]
                 else:
                     filters += output_filters[layer_i]
@@ -84,8 +86,7 @@ def create_modules(module_defs, img_size):
             anchor_idxs = [int(x) for x in module_def["mask"].split(",")]
             # Extract anchors
             anchors = [int(x) for x in module_def["anchors"].split(",")]
-            anchors = [(anchors[i], anchors[i + 1])
-                       for i in range(0, len(anchors), 2)]
+            anchors = [(anchors[i], anchors[i + 1]) for i in range(0, len(anchors), 2)]
             anchors = [anchors[i] for i in anchor_idxs]
             num_classes = int(module_def["classes"])
             img_height = int(hyperparams["height"])
@@ -119,8 +120,8 @@ class YOLOLayer(nn.Module):
         self.ignore_thres = 0.5
         self.lambda_coord = 1
 
-        self.mse_loss = nn.MSELoss(reduction='mean')  # Coordinate loss
-        self.bce_loss = nn.BCELoss(reduction='mean')  # Confidence loss
+        self.mse_loss = nn.MSELoss(reduction="mean")  # Coordinate loss
+        self.bce_loss = nn.BCELoss(reduction="mean")  # Confidence loss
         self.ce_loss = nn.CrossEntropyLoss()  # Class loss
 
     def forward(self, x, targets=None, classes_to_labels=None):
@@ -133,8 +134,9 @@ class YOLOLayer(nn.Module):
         FloatTensor = torch.cuda.FloatTensor if x.is_cuda else torch.FloatTensor
         LongTensor = torch.cuda.LongTensor if x.is_cuda else torch.LongTensor
 
-        prediction = x.view(nB, nA, self.bbox_attrs, nG, nG).permute(
-            0, 1, 3, 4, 2).contiguous()  # nB, nA, nG, nG, n_attrs
+        prediction = (
+            x.view(nB, nA, self.bbox_attrs, nG, nG).permute(0, 1, 3, 4, 2).contiguous()
+        )  # nB, nA, nG, nG, n_attrs
         # Get outputs
         x = torch.sigmoid(prediction[..., 0])  # Center x
         y = torch.sigmoid(prediction[..., 1])  # Center y
@@ -143,12 +145,13 @@ class YOLOLayer(nn.Module):
         pred_conf = torch.sigmoid(prediction[..., 4])  # Conf
         pred_cls = torch.sigmoid(prediction[..., 5:])  # Cls pred.
         # Calculate offsets for each grid
-        grid_x = torch.arange(nG).repeat(nG, 1).view(
-            [1, 1, nG, nG]).type(FloatTensor)
-        grid_y = torch.arange(nG).repeat(nG, 1).t().view(
-            [1, 1, nG, nG]).type(FloatTensor)
+        grid_x = torch.arange(nG).repeat(nG, 1).view([1, 1, nG, nG]).type(FloatTensor)
+        grid_y = (
+            torch.arange(nG).repeat(nG, 1).t().view([1, 1, nG, nG]).type(FloatTensor)
+        )
         scaled_anchors = FloatTensor(
-            [(a_w / stride, a_h / stride) for a_w, a_h in self.anchors])
+            [(a_w / stride, a_h / stride) for a_w, a_h in self.anchors]
+        )
         anchor_w = scaled_anchors[:, 0:1].view((1, nA, 1, 1))
         anchor_h = scaled_anchors[:, 1:2].view((1, nA, 1, 1))
         # Add offset and scale with anchors
@@ -204,12 +207,13 @@ class YOLOLayer(nn.Module):
             loss_y = self.mse_loss(y[mask], ty[mask])
             loss_w = self.mse_loss(w[mask], tw[mask])
             loss_h = self.mse_loss(h[mask], th[mask])
-            loss_conf = self.bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false]) + self.bce_loss(
-                pred_conf[conf_mask_true], tconf[conf_mask_true]
-            )
+            loss_conf = self.bce_loss(
+                pred_conf[conf_mask_false], tconf[conf_mask_false]
+            ) + self.bce_loss(pred_conf[conf_mask_true], tconf[conf_mask_true])
 
-            loss_cls = (1 / nB) * \
-                self.ce_loss(pred_cls[mask], torch.argmax(tcls[mask], 1))
+            loss_cls = (1 / nB) * self.ce_loss(
+                pred_cls[mask], torch.argmax(tcls[mask], 1)
+            )
             loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
 
             return (
@@ -243,24 +247,14 @@ class Darknet(nn.Module):
     def __init__(self, config_path, opt, img_size=416):
         super(Darknet, self).__init__()
         self.module_defs = parse_model_config(config_path)
-        self.hyperparams, self.module_list = create_modules(
-            self.module_defs, img_size)
+        self.hyperparams, self.module_list = create_modules(self.module_defs, img_size)
         self.img_size = img_size
         self.num_classes = len(opt.labels)
         self.seen = 0
         self.header_info = np.array([0, 0, 0, self.seen, 0])
-        self.loss_names = [
-            "x",
-            "y",
-            "w",
-            "h",
-            "conf",
-            "cls",
-            "recall",
-            "precision"]
+        self.loss_names = ["x", "y", "w", "h", "conf", "cls", "recall", "precision"]
         self.opt = opt
         self.is_cuda = torch.cuda.is_available() and opt.use_cuda
-
 
     def forward(self, x, targets=None):
         is_training = targets is not None
@@ -268,7 +262,8 @@ class Darknet(nn.Module):
         self.losses = defaultdict(float)
         layer_outputs = []
         for i, (module_def, module) in enumerate(
-                zip(self.module_defs, self.module_list)):
+            zip(self.module_defs, self.module_list)
+        ):
             if module_def["type"] in ["convolutional", "upsample", "maxpool"]:
                 x = module(x)
             elif module_def["type"] == "route":
@@ -298,7 +293,7 @@ class Darknet(nn.Module):
         """Parses and loads the weights stored in 'weights_path'"""
         # Parses and loads the weights stored in 'weights_path'
         # @:param cutoff  - save layers between 0 and cutoff (cutoff = -1 -> all are saved)
-        if weights_path.endswith('darknet53.conv.74'):
+        if weights_path.endswith("darknet53.conv.74"):
             cutoff = 75
         # Open the weights file
         fp = open(weights_path, "rb")
@@ -313,7 +308,8 @@ class Darknet(nn.Module):
         fp.close()
         ptr = 0
         for i, (module_def, module) in enumerate(
-                zip(self.module_defs[:cutoff], self.module_list[:cutoff])):
+            zip(self.module_defs[:cutoff], self.module_list[:cutoff])
+        ):
             if module_def["type"] == "convolutional":
                 conv_layer = module[0]
                 if module_def["batch_normalize"]:
@@ -321,46 +317,59 @@ class Darknet(nn.Module):
                     bn_layer = module[1]
                     num_b = bn_layer.bias.numel()  # Number of biases
                     # Bias
-                    bn_b = torch.from_numpy(
-                        weights[ptr: ptr + num_b]).view_as(bn_layer.bias)
+                    bn_b = torch.from_numpy(weights[ptr : ptr + num_b]).view_as(
+                        bn_layer.bias
+                    )
                     bn_layer.bias.data.copy_(bn_b)
                     ptr += num_b
                     # Weight
-                    bn_w = torch.from_numpy(
-                        weights[ptr: ptr + num_b]).view_as(bn_layer.weight)
+                    bn_w = torch.from_numpy(weights[ptr : ptr + num_b]).view_as(
+                        bn_layer.weight
+                    )
                     bn_layer.weight.data.copy_(bn_w)
                     ptr += num_b
                     # Running Mean
-                    bn_rm = torch.from_numpy(
-                        weights[ptr: ptr + num_b]).view_as(bn_layer.running_mean)
+                    bn_rm = torch.from_numpy(weights[ptr : ptr + num_b]).view_as(
+                        bn_layer.running_mean
+                    )
                     bn_layer.running_mean.data.copy_(bn_rm)
                     ptr += num_b
                     # Running Var
-                    bn_rv = torch.from_numpy(
-                        weights[ptr: ptr + num_b]).view_as(bn_layer.running_var)
+                    bn_rv = torch.from_numpy(weights[ptr : ptr + num_b]).view_as(
+                        bn_layer.running_var
+                    )
                     bn_layer.running_var.data.copy_(bn_rv)
                     ptr += num_b
                 else:
                     # Load conv. bias
-                    if self.module_defs[i +
-                                        1]['type'] == "yolo" and not match_saved_weights:
+                    if (
+                        self.module_defs[i + 1]["type"] == "yolo"
+                        and not match_saved_weights
+                    ):
                         ptr += 39
                     else:
                         num_b = conv_layer.bias.numel()
-                        conv_b = torch.from_numpy(
-                            weights[ptr: ptr + num_b]).view_as(conv_layer.bias)
+                        conv_b = torch.from_numpy(weights[ptr : ptr + num_b]).view_as(
+                            conv_layer.bias
+                        )
                         conv_layer.bias.data.copy_(conv_b)
                         ptr += num_b
                 # Load conv. weights
-                if self.module_defs[i +
-                                    1]['type'] == "yolo" and not match_saved_weights:
-                    ptr += 39 * \
-                        conv_layer.weight.shape[1] * \
-                        conv_layer.weight.shape[2] * conv_layer.weight.shape[3]
+                if (
+                    self.module_defs[i + 1]["type"] == "yolo"
+                    and not match_saved_weights
+                ):
+                    ptr += (
+                        39
+                        * conv_layer.weight.shape[1]
+                        * conv_layer.weight.shape[2]
+                        * conv_layer.weight.shape[3]
+                    )
                 else:
                     num_w = conv_layer.weight.numel()
-                    conv_w = torch.from_numpy(
-                        weights[ptr: ptr + num_w]).view_as(conv_layer.weight)
+                    conv_w = torch.from_numpy(weights[ptr : ptr + num_w]).view_as(
+                        conv_layer.weight
+                    )
                     conv_layer.weight.data.copy_(conv_w)
                     ptr += num_w
 
@@ -377,7 +386,8 @@ class Darknet(nn.Module):
 
         # Iterate through layers
         for i, (module_def, module) in enumerate(
-                zip(self.module_defs[:cutoff], self.module_list[:cutoff])):
+            zip(self.module_defs[:cutoff], self.module_list[:cutoff])
+        ):
             if module_def["type"] == "convolutional":
                 conv_layer = module[0]
                 # If batch norm, load bn first
@@ -396,65 +406,95 @@ class Darknet(nn.Module):
         fp.close()
 
     def get_output(self, data_dict, classes_to_labels=None):
-        imgs = data_dict['input_img']
+        imgs = data_dict["input_img"]
         imgs = set_device(imgs, self.is_cuda)
         outputs = self.__call__(imgs)
-        outputs = non_max_suppression(outputs, 80, classes_to_labels, conf_thres=self.opt.conf_thres, nms_thres=self.opt.nms_thres)
+        outputs = non_max_suppression(
+            outputs,
+            80,
+            classes_to_labels,
+            conf_thres=self.opt.conf_thres,
+            nms_thres=self.opt.nms_thres,
+        )
         return outputs
 
     def get_bbox_scores(self, data_dict, classes_to_labels=None):
         outputs = self.get_output(data_dict, classes_to_labels)
-        return [o[:, 4].cpu().numpy().mean() for o in outputs if o is not None] 
+        return [o[:, 4].cpu().numpy().mean() for o in outputs if o is not None]
 
-    def m_train(self, data_dict, optimizer, labels_to_classes, vis, len_dataloader, epoch, batch_i, print_msg_fn, total_steps):
+    def m_train(
+        self,
+        data_dict,
+        optimizer,
+        labels_to_classes,
+        vis,
+        len_dataloader,
+        epoch,
+        batch_i,
+        print_msg_fn,
+        total_steps,
+    ):
         accumulated_batches = 4
-        imgs = data_dict['input_img']; targets = data_dict['filled_labels']
+        imgs = data_dict["input_img"]
+        targets = data_dict["filled_labels"]
         imgs = set_device(imgs, self.is_cuda)
         targets = set_device(targets, self.is_cuda)
         # changing target labels to clasess
         if labels_to_classes is not None:
             # we dont want to change locations where there is no annotation
             no_annotation_ind = targets.sum(-1) != 0.0
-            tensor_labels_to_class = set_device(torch.tensor(labels_to_classes), self.is_cuda)
+            tensor_labels_to_class = set_device(
+                torch.tensor(labels_to_classes), self.is_cuda
+            )
             x, y = torch.nonzero(no_annotation_ind, as_tuple=True)
             targets[x, y, 0] = tensor_labels_to_class[targets[x, y, 0].long()].double()
 
         # if is_training:
         loss = self.__call__(imgs, targets)
         loss.backward()
-        if ((batch_i + 1) % accumulated_batches == 0) or (batch_i == len_dataloader - 1):
+        if ((batch_i + 1) % accumulated_batches == 0) or (
+            batch_i == len_dataloader - 1
+        ):
             optimizer.step()
-            optimizer.zero_grad()    
+            optimizer.zero_grad()
         if (batch_i + 1) % 1 == 0:
             for tag, value in self.losses.items():
-                vis.plot('losses_' + tag, value, total_steps)
-            vis.plot('total_loss', loss.item(), total_steps)
+                vis.plot("losses_" + tag, value, total_steps)
+            vis.plot("total_loss", loss.item(), total_steps)
             if not self.opt.background_training:
-                msg = "[Epoch %d/%d, Batch %d/%d] [Losses: " % (epoch, self.opt.epochs, batch_i, len_dataloader)
+                msg = "[Epoch %d/%d, Batch %d/%d] [Losses: " % (
+                    epoch,
+                    self.opt.epochs,
+                    batch_i,
+                    len_dataloader,
+                )
                 for k, v in self.losses.items():
-                    msg += '%s: %f, ' % (k , v)
-                msg += 'total: %f]' % (loss.item())
+                    msg += "%s: %f, " % (k, v)
+                msg += "total: %f]" % (loss.item())
                 print_msg_fn(msg)
 
-    def evaluate(self, data_loader, classes_to_labels, pre_annotation_list=None, progressBar=None):
+    def evaluate(
+        self, data_loader, classes_to_labels, pre_annotation_list=None, progressBar=None
+    ):
         self.eval()
         all_detections = []
         all_annotations = []
         if progressBar is not None:
             progressBar.show()
         for batch_i, data_dict in enumerate(data_loader):
-            targets = data_dict['filled_labels']
+            targets = data_dict["filled_labels"]
             # progressBar.setValue(((batch_i + 1)/len(data_loader))*100)
             if pre_annotation_list is None:
                 imgs = set_device(imgs, self.is_cuda)
                 with torch.no_grad():
                     outputs = self.get_output(data_dict, classes_to_labels)
             else:
-                outputs = pre_annotation_list[batch_i * self.opt.batch_size: (batch_i + 1) * self.opt.batch_size]
+                outputs = pre_annotation_list[
+                    batch_i * self.opt.batch_size : (batch_i + 1) * self.opt.batch_size
+                ]
 
             for output, annotations in zip(outputs, targets):
-                all_detections.append([np.array([])
-                                      for _ in range(self.num_classes)])
+                all_detections.append([np.array([]) for _ in range(self.num_classes)])
                 if output is not None:
                     # Get predicted boxes, confidence scores and labels
                     pred_boxes = output[:, :5].cpu().numpy()
@@ -469,29 +509,33 @@ class Darknet(nn.Module):
                     for label in range(self.num_classes):
                         all_detections[-1][label] = pred_boxes[pred_labels == label]
 
-                all_annotations.append([np.array([])
-                                       for _ in range(self.num_classes)])
+                all_annotations.append([np.array([]) for _ in range(self.num_classes)])
                 if any(annotations[:, -1] > 0):
 
-                    annotation_labels = annotations[annotations[:, -1]
-                                                    > 0, 0].numpy()
+                    annotation_labels = annotations[annotations[:, -1] > 0, 0].numpy()
                     _annotation_boxes = annotations[annotations[:, -1] > 0, 1:]
 
                     # Reformat to x1, y1, x2, y2 and rescale to image
                     # dimensions
                     annotation_boxes = np.empty_like(_annotation_boxes)
-                    annotation_boxes[:, 0] = _annotation_boxes[:,
-                                                               0] - _annotation_boxes[:, 2] / 2
-                    annotation_boxes[:, 1] = _annotation_boxes[:,
-                                                               1] - _annotation_boxes[:, 3] / 2
-                    annotation_boxes[:, 2] = _annotation_boxes[:,
-                                                               0] + _annotation_boxes[:, 2] / 2
-                    annotation_boxes[:, 3] = _annotation_boxes[:,
-                                                               1] + _annotation_boxes[:, 3] / 2
+                    annotation_boxes[:, 0] = (
+                        _annotation_boxes[:, 0] - _annotation_boxes[:, 2] / 2
+                    )
+                    annotation_boxes[:, 1] = (
+                        _annotation_boxes[:, 1] - _annotation_boxes[:, 3] / 2
+                    )
+                    annotation_boxes[:, 2] = (
+                        _annotation_boxes[:, 0] + _annotation_boxes[:, 2] / 2
+                    )
+                    annotation_boxes[:, 3] = (
+                        _annotation_boxes[:, 1] + _annotation_boxes[:, 3] / 2
+                    )
                     annotation_boxes *= self.opt.img_size
 
                     for label in range(self.num_classes):
-                        all_annotations[-1][label] = annotation_boxes[annotation_labels == label, :]
+                        all_annotations[-1][label] = annotation_boxes[
+                            annotation_labels == label, :
+                        ]
 
         average_precisions = {}
         for label in range(self.num_classes):
@@ -515,11 +559,15 @@ class Darknet(nn.Module):
                             continue
 
                         overlaps = bbox_iou_numpy(
-                            np.expand_dims(bbox, axis=0), annotations)
+                            np.expand_dims(bbox, axis=0), annotations
+                        )
                         assigned_annotation = np.argmax(overlaps, axis=1)
                         max_overlap = overlaps[0, assigned_annotation]
 
-                        if max_overlap >= self.opt.iou_thres and assigned_annotation not in detected_annotations:
+                        if (
+                            max_overlap >= self.opt.iou_thres
+                            and assigned_annotation not in detected_annotations
+                        ):
                             true_positives.append(1)
                             detected_annotations.append(assigned_annotation)
                         else:
@@ -542,9 +590,9 @@ class Darknet(nn.Module):
 
                 # compute recall and precision
                 recall = true_positives / num_annotations
-                precision = true_positives / \
-                    np.maximum(true_positives + false_positives,
-                               np.finfo(np.float64).eps)
+                precision = true_positives / np.maximum(
+                    true_positives + false_positives, np.finfo(np.float64).eps
+                )
 
                 # compute average precision
                 average_precision = compute_ap(recall, precision)
@@ -554,14 +602,13 @@ class Darknet(nn.Module):
 
         return mAP, average_precisions
 
-
     def freeze_parameters(self, completed_percentage, freeze_backbone):
         if freeze_backbone:
             if completed_percentage < 0.5:
                 for i, (name, p) in enumerate(self.named_parameters()):
-                    if int(name.split('.')[1]) < 75:  # if layer < 75
+                    if int(name.split(".")[1]) < 75:  # if layer < 75
                         p.requires_grad = False
             elif completed_percentage >= 0.5:
                 for i, (name, p) in enumerate(self.named_parameters()):
-                    if int(name.split('.')[1]) < 75:  # if layer < 75
+                    if int(name.split(".")[1]) < 75:  # if layer < 75
                         p.requires_grad = True

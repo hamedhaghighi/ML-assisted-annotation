@@ -15,9 +15,7 @@ class Ui_Login(object):
     def setupUi(self, Login):
         Login.setObjectName("Login")
         Login.resize(370, 120)
-        Login.setStyleSheet("background-color:#353535;\n"
-"color:white;\n"
-"")
+        Login.setStyleSheet("background-color:#353535;\n" "color:white;\n" "")
         self.formLayoutWidget = QtWidgets.QWidget(Login)
         self.formLayoutWidget.setGeometry(QtCore.QRect(10, 10, 341, 91))
         self.formLayoutWidget.setObjectName("formLayoutWidget")
@@ -40,7 +38,9 @@ class Ui_Login(object):
         self.lineEdit_2.setObjectName("lineEdit_2")
         self.formLayout.setWidget(1, QtWidgets.QFormLayout.FieldRole, self.lineEdit_2)
         self.pushButton = QtWidgets.QPushButton(self.formLayoutWidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.pushButton.sizePolicy().hasHeightForWidth())

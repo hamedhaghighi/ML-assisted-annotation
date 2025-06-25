@@ -16,31 +16,35 @@ class Ui_MainWindow(object):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(1250, 656)
         icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("ui_files/../assets/main_window_icon.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon.addPixmap(
+            QtGui.QPixmap("ui_files/../assets/main_window_icon.png"),
+            QtGui.QIcon.Normal,
+            QtGui.QIcon.Off,
+        )
         MainWindow.setWindowIcon(icon)
-        MainWindow.setStyleSheet("background-color:#353535;\n"
-"color:white;\n"
-"")
+        MainWindow.setStyleSheet("background-color:#353535;\n" "color:white;\n" "")
         self.centralwidget = QtWidgets.QWidget(MainWindow)
-        self.centralwidget.setStyleSheet("QRadioButton::indicator, QCheckBox::indicator{\n"
-"background-color: white;\n"
-"}\n"
-"QRadioButton::indicator:checked, QCheckBox::indicator::checked {\n"
-"    background-color:       black;\n"
-"}\n"
-"QLineEdit, QTextEdit{\n"
-"    background-color: #505050;\n"
-"    color: #ffffff;\n"
-"}\n"
-"\n"
-"QRadioButton::indicator, QCheckBox::indicator\n"
-"{\n"
-"background-color: white;\n"
-"\n"
-"}\n"
-"QRadioButton::indicator:checked, QCheckBox::indicator::checked {\n"
-"    background-color:   #3497d5;\n"
-"}")
+        self.centralwidget.setStyleSheet(
+            "QRadioButton::indicator, QCheckBox::indicator{\n"
+            "background-color: white;\n"
+            "}\n"
+            "QRadioButton::indicator:checked, QCheckBox::indicator::checked {\n"
+            "    background-color:       black;\n"
+            "}\n"
+            "QLineEdit, QTextEdit{\n"
+            "    background-color: #505050;\n"
+            "    color: #ffffff;\n"
+            "}\n"
+            "\n"
+            "QRadioButton::indicator, QCheckBox::indicator\n"
+            "{\n"
+            "background-color: white;\n"
+            "\n"
+            "}\n"
+            "QRadioButton::indicator:checked, QCheckBox::indicator::checked {\n"
+            "    background-color:   #3497d5;\n"
+            "}"
+        )
         self.centralwidget.setObjectName("centralwidget")
         self.gridLayout = QtWidgets.QGridLayout(self.centralwidget)
         self.gridLayout.setObjectName("gridLayout")
@@ -48,7 +52,9 @@ class Ui_MainWindow(object):
         self.horizontalLayout.setObjectName("horizontalLayout")
         self.progressBar = QtWidgets.QProgressBar(self.centralwidget)
         self.progressBar.setEnabled(True)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.progressBar.sizePolicy().hasHeightForWidth())
@@ -58,7 +64,9 @@ class Ui_MainWindow(object):
         self.progressBar.setObjectName("progressBar")
         self.horizontalLayout.addWidget(self.progressBar)
         self.checkBox = QtWidgets.QCheckBox(self.centralwidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Preferred
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.checkBox.sizePolicy().hasHeightForWidth())
@@ -66,7 +74,9 @@ class Ui_MainWindow(object):
         self.checkBox.setObjectName("checkBox")
         self.horizontalLayout.addWidget(self.checkBox)
         self.pushButton = QtWidgets.QPushButton(self.centralwidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Preferred
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.pushButton.sizePolicy().hasHeightForWidth())
@@ -75,7 +85,9 @@ class Ui_MainWindow(object):
         self.horizontalLayout.addWidget(self.pushButton)
         self.gridLayout.addLayout(self.horizontalLayout, 0, 1, 1, 1)
         self.textBrowser = QtWidgets.QTextBrowser(self.centralwidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.textBrowser.sizePolicy().hasHeightForWidth())
@@ -85,17 +97,20 @@ class Ui_MainWindow(object):
         self.textBrowser.setFont(font)
         self.textBrowser.setObjectName("textBrowser")
         self.gridLayout.addWidget(self.textBrowser, 1, 1, 1, 1)
-        spacerItem = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum)
+        spacerItem = QtWidgets.QSpacerItem(
+            40, 20, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
+        )
         self.gridLayout.addItem(spacerItem, 1, 0, 1, 1)
-        spacerItem1 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum)
+        spacerItem1 = QtWidgets.QSpacerItem(
+            40, 20, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum
+        )
         self.gridLayout.addItem(spacerItem1, 1, 2, 1, 1)
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(MainWindow)
         self.menubar.setGeometry(QtCore.QRect(0, 0, 1250, 20))
-        self.menubar.setStyleSheet("background-color:#505050\n"
-";\n"
-"color:white;\n"
-"")
+        self.menubar.setStyleSheet(
+            "background-color:#505050\n" ";\n" "color:white;\n" ""
+        )
         self.menubar.setObjectName("menubar")
         self.menuFile = QtWidgets.QMenu(self.menubar)
         self.menuFile.setObjectName("menuFile")

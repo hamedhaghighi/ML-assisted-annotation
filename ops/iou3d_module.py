@@ -2,8 +2,7 @@
 
 import torch
 
-from .iou3d_op import (boxes_iou_bev_gpu, boxes_overlap_bev_gpu, nms_gpu,
-                       nms_normal_gpu)
+from .iou3d_op import boxes_iou_bev_gpu, boxes_overlap_bev_gpu, nms_gpu, nms_normal_gpu
 
 
 def boxes_overlap_bev(boxes_a, boxes_b):
@@ -16,8 +15,7 @@ def boxes_overlap_bev(boxes_a, boxes_b):
     Returns:
         ans_overlap (torch.Tensor): Overlap result with shape (M, N).
     """
-    ans_overlap = boxes_a.new_zeros(
-        torch.Size((boxes_a.shape[0], boxes_b.shape[0])))
+    ans_overlap = boxes_a.new_zeros(torch.Size((boxes_a.shape[0], boxes_b.shape[0])))
 
     boxes_overlap_bev_gpu(boxes_a.contiguous(), boxes_b.contiguous(), ans_overlap)
 
@@ -34,8 +32,7 @@ def boxes_iou_bev(boxes_a, boxes_b):
     Returns:
         ans_iou (torch.Tensor): IoU result with shape (M, N).
     """
-    ans_iou = boxes_a.new_zeros(
-        torch.Size((boxes_a.shape[0], boxes_b.shape[0])))
+    ans_iou = boxes_a.new_zeros(torch.Size((boxes_a.shape[0], boxes_b.shape[0])))
 
     boxes_iou_bev_gpu(boxes_a.contiguous(), boxes_b.contiguous(), ans_iou)
 
@@ -86,6 +83,5 @@ def nms_normal_gpu(boxes, scores, thresh):
     boxes = boxes[order].contiguous()
 
     keep = torch.zeros(boxes.size(0), dtype=torch.long)
-    num_out = nms_normal_gpu(boxes, keep, thresh,
-                                        boxes.device.index)
+    num_out = nms_normal_gpu(boxes, keep, thresh, boxes.device.index)
     return order[keep[:num_out].cuda(boxes.device)].contiguous()
