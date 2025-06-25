@@ -3,6 +3,9 @@ from __future__ import division
 import datetime
 import math
 import os
+
+# from PyQt5.QtWidgets import QMessageBox
+import pickle
 import random
 import time
 
@@ -13,54 +16,56 @@ import torch
 from matplotlib.ticker import NullLocator
 from PIL import Image
 from torch.utils.tensorboard import SummaryWriter
-# from PyQt5.QtWidgets import QMessageBox
-import pickle
 
 
-
-class Log():
+class Log:
     def __init__(self, opt, resume):
         self.labelled_filenames = []
         self.selected_filenames = []
         self.opt = opt
-        self.log_dir = os.path.join(self.opt.checkpoint_dir, 'log.pkl')
+        self.log_dir = os.path.join(self.opt.checkpoint_dir, "log.pkl")
         if os.path.exists(self.log_dir):
             self.load()
         else:
             self.save()
 
     def load(self):
-        with open(self.log_dir, 'rb') as f:
+        with open(self.log_dir, "rb") as f:
             dict = pickle.load(f)
-        self.labelled_filenames = dict['labelled_filenames']
-        self.selected_filenames = dict['selected_filenames']
+        self.labelled_filenames = dict["labelled_filenames"]
+        self.selected_filenames = dict["selected_filenames"]
+
     def save(self):
-        with open(self.log_dir, 'wb') as f:
-            dict = {'labelled_filenames':self.labelled_filenames, 'selected_filenames': self.selected_filenames}
+        with open(self.log_dir, "wb") as f:
+            dict = {
+                "labelled_filenames": self.labelled_filenames,
+                "selected_filenames": self.selected_filenames,
+            }
             pickle.dump(dict, f)
+
     def update_selected(self, filenames):
         self.selected_filenames = filenames
         self.save()
+
     def update_labelled(self):
         self.labelled_filenames.extend(self.selected_filenames)
         self.selected_filenames = []
         self.save()
 
-class Visualizer():
-    """
-    """
+
+class Visualizer:
+    """ """
 
     def __init__(self, checkpoint_dir):
         self.tb_dir = os.path.join(
-            checkpoint_dir,
-            'TB',
-            datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+            checkpoint_dir, "TB", datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        )
         os.makedirs(self.tb_dir, exist_ok=True)
         self.checkpoint_dir = checkpoint_dir
         self.writer = SummaryWriter(self.tb_dir)
 
         self.index = {}
-        self.log_text = ''
+        self.log_text = ""
 
     def plot(self, tag, loss, step):
         """
@@ -79,27 +84,25 @@ class Visualizer():
 
         if len(img_.size()) < 3:
             img_ = img_.cpu().unsqueeze(0)
-        self.vis.image(img_.cpu(),
-                       win=name,
-                       opts=dict(title=name)
-                       )
+        self.vis.image(img_.cpu(), win=name, opts=dict(title=name))
 
     def img_grid_many(self, d):
         for k, v in d.items():
             self.img_grid(k, v)
 
     def img_grid(self, name, input_3d):
-        self.img(name, tv.utils.make_grid(
-            input_3d.cpu()[0].unsqueeze(1).clamp(max=1, min=0)))
+        self.img(
+            name, tv.utils.make_grid(input_3d.cpu()[0].unsqueeze(1).clamp(max=1, min=0))
+        )
 
-    def log(self, info, win='log_text'):
+    def log(self, info, win="log_text"):
         """
         self.log({'loss':1,'lr':0.0001})
         """
 
-        self.log_text += ('[{time}] {info} <br>'.format(
-            time=time.strftime('%m%d_%H%M%S'),
-            info=info))
+        self.log_text += "[{time}] {info} <br>".format(
+            time=time.strftime("%m%d_%H%M%S"), info=info
+        )
         self.vis.text(self.log_text, win=win)
 
     def __getattr__(self, name):
@@ -125,7 +128,7 @@ def weights_init_normal(m):
 
 
 def compute_ap(recall, precision):
-    """ Compute the average precision, given the recall and precision curves.
+    """Compute the average precision, given the recall and precision curves.
     Code originally from https://github.com/rbgirshick/py-faster-rcnn.
 
     # Arguments
@@ -164,10 +167,8 @@ def bbox_iou(box1, box2, x1y1x2y2=True):
         b2_y1, b2_y2 = box2[:, 1] - box2[:, 3] / 2, box2[:, 1] + box2[:, 3] / 2
     else:
         # Get the coordinates of bounding boxes
-        b1_x1, b1_y1, b1_x2, b1_y2 = box1[:,
-                                          0], box1[:, 1], box1[:, 2], box1[:, 3]
-        b2_x1, b2_y1, b2_x2, b2_y2 = box2[:,
-                                          0], box2[:, 1], box2[:, 2], box2[:, 3]
+        b1_x1, b1_y1, b1_x2, b1_y2 = box1[:, 0], box1[:, 1], box1[:, 2], box1[:, 3]
+        b2_x1, b2_y1, b2_x2, b2_y2 = box2[:, 0], box2[:, 1], box2[:, 2], box2[:, 3]
 
     # get the corrdinates of the intersection rectangle
     inter_rect_x1 = torch.max(b1_x1, b2_x1)
@@ -202,13 +203,20 @@ def bbox_iou_numpy(box1, box2):
     """
     area = (box2[:, 2] - box2[:, 0]) * (box2[:, 3] - box2[:, 1])
 
-    iw = np.minimum(np.expand_dims(box1[:, 2], axis=1), box2[:, 2]) - np.maximum(np.expand_dims(box1[:, 0], 1), box2[:, 0])
-    ih = np.minimum(np.expand_dims(box1[:, 3], axis=1), box2[:, 3]) - np.maximum(np.expand_dims(box1[:, 1], 1), box2[:, 1])
+    iw = np.minimum(np.expand_dims(box1[:, 2], axis=1), box2[:, 2]) - np.maximum(
+        np.expand_dims(box1[:, 0], 1), box2[:, 0]
+    )
+    ih = np.minimum(np.expand_dims(box1[:, 3], axis=1), box2[:, 3]) - np.maximum(
+        np.expand_dims(box1[:, 1], 1), box2[:, 1]
+    )
     iw = np.maximum(iw, 0)
     ih = np.maximum(ih, 0)
 
-    ua = np.expand_dims((box1[:, 2] - box1[:, 0]) *
-                        (box1[:, 3] - box1[:, 1]), axis=1) + area - iw * ih
+    ua = (
+        np.expand_dims((box1[:, 2] - box1[:, 0]) * (box1[:, 3] - box1[:, 1]), axis=1)
+        + area
+        - iw * ih
+    )
 
     ua = np.maximum(ua, np.finfo(float).eps)
 
@@ -224,8 +232,10 @@ def calc_bbox_correction(bbox1, bbox2, x_ratio, y_ratio):
     diff_y2 = np.abs(bbox1[3] - bbox2[3])
     return (diff_x1 + diff_x2) * x_ratio + (diff_y1 + diff_y2) * y_ratio
 
-def non_max_suppression(prediction, num_classes,
-                        classes_to_labels=None, conf_thres=0.5, nms_thres=0.4):
+
+def non_max_suppression(
+    prediction, num_classes, classes_to_labels=None, conf_thres=0.5, nms_thres=0.4
+):
     """
     Removes detections with lower object confidence score than 'conf_thres' and performs
     Non-Maximum Suppression to further filter detections.
@@ -250,15 +260,16 @@ def non_max_suppression(prediction, num_classes,
             continue
         # Get score and class with highest confidence
         class_conf, class_pred = torch.max(
-            image_pred[:, 5: 5 + num_classes], 1, keepdim=True)
+            image_pred[:, 5 : 5 + num_classes], 1, keepdim=True
+        )
         # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf,
         # class_pred)
         detections = torch.cat(
-            (image_pred[:, :5], class_conf.float(), class_pred.float()), 1)
+            (image_pred[:, :5], class_conf.float(), class_pred.float()), 1
+        )
         # map and filter based on classes to labels
         if classes_to_labels is not None:
-            detections[:, -1] = classes_to_labels[detections[:, -1].long()
-                                                  ].float()
+            detections[:, -1] = classes_to_labels[detections[:, -1].long()].float()
             detections = detections[detections[:, -1] >= 0.0]
 
         if not detections.size(0):
@@ -271,8 +282,7 @@ def non_max_suppression(prediction, num_classes,
             # Get the detections with the particular class
             detections_class = detections[detections[:, -1] == c]
             # Sort the detections by maximum objectness confidence
-            _, conf_sort_index = torch.sort(
-                detections_class[:, 4], descending=True)
+            _, conf_sort_index = torch.sort(detections_class[:, 4], descending=True)
             detections_class = detections_class[conf_sort_index]
             # Perform non-maximum suppression
             max_detections = []
@@ -291,14 +301,25 @@ def non_max_suppression(prediction, num_classes,
             max_detections = torch.cat(max_detections).data
             # Add max detections to outputs
             output[image_i] = (
-                max_detections if output[image_i] is None else torch.cat(
-                    (output[image_i], max_detections)))
+                max_detections
+                if output[image_i] is None
+                else torch.cat((output[image_i], max_detections))
+            )
 
     return output
 
 
 def build_targets(
-    pred_boxes, pred_conf, pred_cls, target, anchors, num_anchors, num_classes, grid_size, ignore_thres, img_dim
+    pred_boxes,
+    pred_conf,
+    pred_cls,
+    target,
+    anchors,
+    num_anchors,
+    num_classes,
+    grid_size,
+    ignore_thres,
+    img_dim,
 ):
     nB = target.size(0)
     nA = num_anchors
@@ -330,8 +351,9 @@ def build_targets(
             # Get shape of gt box
             gt_box = torch.FloatTensor(np.array([0, 0, gw, gh])).unsqueeze(0)
             # Get shape of anchor box
-            anchor_shapes = torch.FloatTensor(np.concatenate(
-                (np.zeros((len(anchors), 2)), np.array(anchors)), 1))
+            anchor_shapes = torch.FloatTensor(
+                np.concatenate((np.zeros((len(anchors), 2)), np.array(anchors)), 1)
+            )
             # Calculate iou between gt and anchor shapes
             anch_ious = bbox_iou(gt_box, anchor_shapes)
             # Where the overlap is larger than threshold set mask to zero
@@ -368,25 +390,22 @@ def build_targets(
 
 
 def to_categorical(y, num_classes):
-    """ 1-hot encodes a tensor """
+    """1-hot encodes a tensor"""
     return torch.from_numpy(np.eye(num_classes, dtype="uint8")[y])
 
 
-def draw_bbox(img_path, detections, classes,
-              kitti_img_size=416, resize_tuple=None):
+def draw_bbox(img_path, detections, classes, kitti_img_size=416, resize_tuple=None):
     resized_pil, _ = m_resize(Image.open(img_path), resize_tuple)
     img = np.array(resized_pil)
-    cmap = plt.get_cmap('PuBuGn_r')
+    cmap = plt.get_cmap("PuBuGn_r")
     colors = [cmap(i) for i in np.linspace(0, 1, 20)]
     # plt.figure()
     fig, ax = plt.subplots(1)
     ax.imshow(img)
-    #kitti_img_size = 11*32
+    # kitti_img_size = 11*32
     # The amount of padding that was added
-    pad_x = max(img.shape[0] - img.shape[1], 0) * \
-        (kitti_img_size / max(img.shape))
-    pad_y = max(img.shape[1] - img.shape[0], 0) * \
-        (kitti_img_size / max(img.shape))
+    pad_x = max(img.shape[0] - img.shape[1], 0) * (kitti_img_size / max(img.shape))
+    pad_y = max(img.shape[1] - img.shape[0], 0) * (kitti_img_size / max(img.shape))
     # Image height and width after padding is removed
     unpad_h = kitti_img_size - pad_y
     unpad_w = kitti_img_size - pad_x
@@ -404,24 +423,29 @@ def draw_bbox(img_path, detections, classes,
                 y1 = int(((y1 - pad_y // 2) / unpad_h) * (img.shape[0]))
                 x1 = int(((x1 - pad_x // 2) / unpad_w) * (img.shape[1]))
 
-                color = bbox_colors[int(
-                    np.where(unique_labels == int(cls_pred))[0])]
+                color = bbox_colors[int(np.where(unique_labels == int(cls_pred))[0])]
                 # Create a Rectangle patch
                 bbox = patches.Rectangle(
-                    (x1, y1), box_w, box_h, linewidth=2, edgecolor=color, facecolor='none')
+                    (x1, y1),
+                    box_w,
+                    box_h,
+                    linewidth=2,
+                    edgecolor=color,
+                    facecolor="none",
+                )
                 # Add the bbox to the plot
                 ax.add_patch(bbox)
                 # Add label
-                plt.text(x1,
-                         y1 - 30,
-                         s=classes[int(cls_pred)] + ' ' +
-                         str('%.4f' % cls_conf.item()),
-                         color='white',
-                         verticalalignment='top',
-                         bbox={'color': color,
-                               'pad': 0})
+                plt.text(
+                    x1,
+                    y1 - 30,
+                    s=classes[int(cls_pred)] + " " + str("%.4f" % cls_conf.item()),
+                    color="white",
+                    verticalalignment="top",
+                    bbox={"color": color, "pad": 0},
+                )
     # Save generated image with detections
-    plt.axis('off')
+    plt.axis("off")
     plt.gca().xaxis.set_major_locator(NullLocator())
     plt.gca().yaxis.set_major_locator(NullLocator())
     plt.show()
@@ -436,9 +460,9 @@ def m_resize(PIL_img, resize_tuple):
         w, h = PIL_img.size
         ratio = (resize_tuple[0] / w, resize_tuple[1] / h)
         ind = np.argmin(
-            np.array([abs(1 - resize_tuple[0] / w), abs(1 - resize_tuple[1] / h)]))
-        return PIL_img.resize(
-            (int(ratio[ind] * w), int(ratio[ind] * h))), ratio[ind]
+            np.array([abs(1 - resize_tuple[0] / w), abs(1 - resize_tuple[1] / h)])
+        )
+        return PIL_img.resize((int(ratio[ind] * w), int(ratio[ind] * h))), ratio[ind]
     return PIL_img, None
 
 
@@ -456,40 +480,40 @@ def convert_target_to_detection(target, img_size):
 
 
 def make_ordinal(n):
-    '''
+    """
     Convert an integer into its ordinal representation::
 
         make_ordinal(0)   => '0th'
         make_ordinal(3)   => '3rd'
         make_ordinal(122) => '122nd'
         make_ordinal(213) => '213th'
-    '''
+    """
     n = int(n)
     if 11 <= (n % 100) <= 13:
-        suffix = 'th'
+        suffix = "th"
     else:
-        suffix = ['th', 'st', 'nd', 'rd', 'th'][min(n % 10, 4)]
+        suffix = ["th", "st", "nd", "rd", "th"][min(n % 10, 4)]
     return str(n) + suffix
 
 
 def set_device(pyt_element, is_cuda):
-        if is_cuda:
-            pyt_element = pyt_element.cuda()
-        return pyt_element
-    
+    if is_cuda:
+        pyt_element = pyt_element.cuda()
+    return pyt_element
 
-def show_msgbox(parent, msg, button=None, type='info', is_gui=True):
+
+def show_msgbox(parent, msg, button=None, type="info", is_gui=True):
     if is_gui:
         msgBox = QMessageBox()
-        icon = QMessageBox.Information if type=='info' else QMessageBox.Critical
-        msgBox.setIcon( icon )
+        icon = QMessageBox.Information if type == "info" else QMessageBox.Critical
+        msgBox.setIcon(icon)
         msgBox.setText(msg)
         # msgBox.setInformativeText( "Do you really want to disable safety enforcement?" )
-        if button == 'OK':
-            msgBox.addButton( QMessageBox.Ok )
-        elif button == 'yes/no':
-            msgBox.addButton( QMessageBox.No )
-            msgBox.addButton( QMessageBox.Yes )
+        if button == "OK":
+            msgBox.addButton(QMessageBox.Ok)
+        elif button == "yes/no":
+            msgBox.addButton(QMessageBox.No)
+            msgBox.addButton(QMessageBox.Yes)
         ret = msgBox.exec_()
         return ret
     else:

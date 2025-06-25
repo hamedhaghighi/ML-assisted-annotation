@@ -20,7 +20,9 @@ class Ui_Dialog(object):
         self.gridLayout = QtWidgets.QGridLayout()
         self.gridLayout.setObjectName("gridLayout")
         self.subset_size = QtWidgets.QSpinBox(Dialog)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.subset_size.sizePolicy().hasHeightForWidth())
@@ -31,7 +33,9 @@ class Ui_Dialog(object):
         self.label_14.setObjectName("label_14")
         self.gridLayout.addWidget(self.label_14, 4, 0, 1, 1)
         self.label_10 = QtWidgets.QLabel(Dialog)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.label_10.sizePolicy().hasHeightForWidth())
@@ -42,7 +46,9 @@ class Ui_Dialog(object):
         self.label_12.setObjectName("label_12")
         self.gridLayout.addWidget(self.label_12, 5, 0, 1, 1)
         self.batch_size = QtWidgets.QSpinBox(Dialog)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.batch_size.sizePolicy().hasHeightForWidth())
@@ -56,7 +62,9 @@ class Ui_Dialog(object):
         self.label_13.setObjectName("label_13")
         self.gridLayout.addWidget(self.label_13, 3, 0, 1, 1)
         self.query_mode = QtWidgets.QComboBox(Dialog)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.query_mode.sizePolicy().hasHeightForWidth())
@@ -64,19 +72,27 @@ class Ui_Dialog(object):
         self.query_mode.setObjectName("query_mode")
         self.gridLayout.addWidget(self.query_mode, 3, 1, 1, 1, QtCore.Qt.AlignHCenter)
         self.performance_thresh = QtWidgets.QSlider(Dialog)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.performance_thresh.sizePolicy().hasHeightForWidth())
+        sizePolicy.setHeightForWidth(
+            self.performance_thresh.sizePolicy().hasHeightForWidth()
+        )
         self.performance_thresh.setSizePolicy(sizePolicy)
         self.performance_thresh.setMaximum(100)
         self.performance_thresh.setSingleStep(1)
         self.performance_thresh.setOrientation(QtCore.Qt.Horizontal)
         self.performance_thresh.setObjectName("performance_thresh")
-        self.gridLayout.addWidget(self.performance_thresh, 4, 1, 1, 1, QtCore.Qt.AlignHCenter)
+        self.gridLayout.addWidget(
+            self.performance_thresh, 4, 1, 1, 1, QtCore.Qt.AlignHCenter
+        )
         self.ok = QtWidgets.QPushButton(Dialog)
         self.ok.setEnabled(True)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.ok.sizePolicy().hasHeightForWidth())
@@ -84,7 +100,9 @@ class Ui_Dialog(object):
         self.ok.setObjectName("ok")
         self.gridLayout.addWidget(self.ok, 6, 1, 1, 1)
         self.epochs = QtWidgets.QSpinBox(Dialog)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed
+        )
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.epochs.sizePolicy().hasHeightForWidth())
