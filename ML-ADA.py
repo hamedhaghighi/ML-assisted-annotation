@@ -1,3 +1,19 @@
+"""
+ML-ADA (Machine Learning Assisted Data Annotation) - Main Application Module
+
+This module provides the core functionality for ML-assisted annotation of 2D and 3D datasets.
+It supports both GUI and command-line interfaces, with automatic model training and
+annotation refinement capabilities.
+
+Key Features:
+- 2D object detection using YOLO models
+- 3D object detection using PointPillars
+- Integration with CVAT annotation tool
+- Automatic model fine-tuning
+- Batch annotation processing
+- Progress tracking and logging
+"""
+
 import json
 import os
 import pickle
@@ -17,6 +33,7 @@ import wget
 from PyQt5.QtWidgets import QMessageBox
 from torch.utils.data import Subset
 
+# Import custom modules for annotation, datasets, and models
 from annotation_toolkit import AnnotationToolkit
 from datasets import get_dataset
 from datasets.datasets2D import collate_fn as collate_fn_2d
@@ -42,10 +59,12 @@ from utils.utils import (
     weights_init_normal,
 )
 
+# Determine if running in GUI or CLI mode based on command line arguments
 is_gui = None
 if len(sys.argv) > 1:
     if sys.argv[1] == "--gui":
         is_gui = True
+        # Import GUI-specific modules only when needed
         from PyQt5.QtCore import QThread, pyqtSignal
         from PyQt5.QtWidgets import QApplication, QMainWindow
 
@@ -62,7 +81,15 @@ if is_gui is None:
 
 
 class MargParse:
+    """
+    Configuration parser that sets default values and processes annotation tool options.
+    
+    This class handles the conversion of configuration dictionaries to object attributes
+    with sensible defaults for ML-ADA parameters.
+    """
+    
     def __init__(self, opt):
+        # Set default values for common parameters
         self.img_size = 416
         self.background_training = False
         self.n_cpu = 4
@@ -70,8 +97,12 @@ class MargParse:
         self.conf_thres = 0.8
         self.nms_thres = 0.4
         self.checkpoint_dir = "checkpoints"
+        
+        # Override defaults with provided options
         for k, v in opt.items():
             setattr(self, k, v)
+            
+        # Handle annotation tool configuration
         if self.annotation_tool == "cvat_api":
             self.annotation_tool = "cvat"
             self.use_api = True
@@ -83,25 +114,45 @@ class MargParse:
 
 
 class MLADA(*inhertance_classes):
+    """
+    Main ML-ADA application class that orchestrates the annotation workflow.
+    
+    This class handles both GUI and CLI modes, manages model training, dataset processing,
+    and coordinates the annotation pipeline from pre-annotation to fine-tuning.
+    """
+    
     if is_gui:
+        # GUI-specific signals for progress updates and text display
         textBrowser_signal = pyqtSignal(str)
         progress_bar_signal = pyqtSignal(int)
 
     def init_func(self, opt):
+        """
+        Initialize the ML-ADA application with configuration options.
+        
+        Args:
+            opt: Configuration dictionary containing experiment parameters
+        """
         if is_gui:
+            # Set up GUI threading for subset selection
             self.subset_selection_thread = QThread()
             self.subset_selection_thread.started.connect(self.annotate_next_subset)
             self.pushButton.clicked.connect(
                 lambda: self.start_thread(self.subset_selection_thread)
             )
             self.textBrowser_signal.connect(self.receive_texbrowser_signal)
+            
+        # Validate configuration options
         if not check_opt(opt, self.print_msg):
             self.exit_(1)
+            
         opt_dict = opt
         opt = MargParse(opt)
+        
         if not isinstance(opt.exp_name, str):
             exit(1)
-        # Setting random seeds to permit repeatability
+            
+        # Set random seeds for reproducibility
         seed = 0
         random.seed(seed)
         np.random.seed(seed)
@@ -109,6 +160,8 @@ class MLADA(*inhertance_classes):
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+        
+        # Initialize training state variables
         self.training_thread = None
         self.training_model = None
         self.training_epoch = 0
@@ -117,19 +170,27 @@ class MLADA(*inhertance_classes):
         self.training_iteration = 0
         self.training_dataloader_len = 0
         self.loop_iteration = 0
+        
+        # Store configuration and determine model type
         self.opt = opt
         img_size = opt.img_size
         self.is_gui = is_gui
-        self.is_two_d = "yolo" in opt.model_name
+        self.is_two_d = "yolo" in opt.model_name  # True for 2D YOLO, False for 3D PointPillars
         self.velo_folder_name = "velodyne_reduced"
         self.image_shape = None
         self.skip_rt = False
+        
+        # Set up model configuration and checkpoint directory
         cfg = f"config/{opt.model_name}.cfg"
         opt.checkpoint_dir = os.path.join(opt.checkpoint_dir, opt.exp_name)
+        
+        # Initialize annotation toolkit
         self.annotation_toolkit = AnnotationToolkit(
             self.opt, is_gui, self.is_two_d, self.textBrowser_signal if is_gui else None
         )
         self.calib_info = None
+        
+        # Handle experiment resumption
         resume = False
         if os.path.exists(opt.checkpoint_dir):
             while True:
@@ -160,12 +221,16 @@ class MLADA(*inhertance_classes):
                         self.print_msg("The previous project deleted.")
                         break
                 sleep(1)
+                
+        # Create checkpoint directory and save configuration
         os.makedirs(opt.checkpoint_dir, exist_ok=True)
         with open(f"{os.path.join(opt.checkpoint_dir, 'config.json')}", "w") as f:
             json.dump(opt_dict, f)
         self.print_msg(
             f"Config file saved in {os.path.join(opt.checkpoint_dir, 'config.json')}"
         )
+        
+        # Handle model weights download and loading
         weights_path = (
             os.path.join(f"{opt.checkpoint_dir}", "best.weights")
             if resume
@@ -185,8 +250,11 @@ class MLADA(*inhertance_classes):
             shutil.copy(
                 weights_path, os.path.join(f"{opt.checkpoint_dir}", "best.weights")
             )
+            
+        # Initialize logging system
         self.logger = Log(opt, resume)
-        # creating class-to-label and lable-to-class maps
+        
+        # Load and configure the appropriate model (2D YOLO or 3D PointPillars)
         if self.is_two_d:
             model = Darknet(cfg, opt, img_size)
             model.apply(weights_init_normal)
@@ -199,15 +267,16 @@ class MLADA(*inhertance_classes):
 
         self.nclasses = len(classes)
         self.model = model
-        # resize_tuple = (1224, 370)
         self.resize_tuple = None
-        # creating class-to-label and lable-to-class maps
+        
+        # Create class-to-label and label-to-class mapping dictionaries
         classes_dict = {c: i for i, c in enumerate(classes)}
         # The user should define its own labels and the labels-to-class map. If
         # doesn't match any class put -1 in the list.
         labels = opt.labels
         labels_to_classes = opt.labels_to_classes
-        #######################################################################
+        
+        # Initialize mapping arrays with -1 (no mapping)
         classes_to_labels = -1 * np.ones(len(classes_dict))
 
         for i, l in enumerate(labels_to_classes):
@@ -220,7 +289,8 @@ class MLADA(*inhertance_classes):
         self.labels = labels
         self.num_classes = len(labels)
         resize_tuple = None
-        # Initiating Datasets
+        
+        # Initialize dataset with unlabelled data
         unlabelled_set = get_dataset(
             opt.data_dir,
             labels,
@@ -235,6 +305,7 @@ class MLADA(*inhertance_classes):
         )
         self.annotation_toolkit.create_task()
 
+        # Create filename to index mapping for efficient lookup
         filenames = list(
             map(
                 lambda l: l.split(os.path.sep)[-1].split(".")[0],
@@ -243,6 +314,7 @@ class MLADA(*inhertance_classes):
         )
         self.f2i = {f: i for i, f in enumerate(filenames)}
 
+        # Shuffle dataset indices for random sampling
         random_ordered_indices = np.arange(len(unlabelled_set))
         random.shuffle(random_ordered_indices)
         self.unlabelled_set = unlabelled_set
@@ -252,17 +324,18 @@ class MLADA(*inhertance_classes):
         self.total_iterations = int(
             np.ceil(self.len_total_dataset / self.opt.subset_size)
         )
-        # Instantiating visualiser
-
+        # Initialize visualizer for plotting and logging
         vis = Visualizer(opt.checkpoint_dir)
         self.vis = vis
-        # Instantiating and loading the model
+        
+        # Set up device (CPU/GPU) and move model to appropriate device
         self.is_cuda = torch.cuda.is_available() and opt.use_cuda
         model = set_device(model, self.is_cuda)
         self.classes_to_labels = set_device(
             torch.from_numpy(self.classes_to_labels), self.is_cuda
         )
 
+        # Initialize performance tracking variables
         self.val_best_mAP = 0.0
         self.subset_best_mAP = 0.0
 
@@ -277,7 +350,15 @@ class MLADA(*inhertance_classes):
             )
 
     def __init__(self, opt, parent=None):
+        """
+        Initialize ML-ADA application with GUI or CLI mode.
+        
+        Args:
+            opt: Configuration dictionary
+            parent: Parent widget for GUI mode
+        """
         if is_gui:
+            # Initialize GUI components and start initialization in separate thread
             super().__init__(parent)
             self.setupUi(self)
             self.show()
@@ -285,19 +366,35 @@ class MLADA(*inhertance_classes):
             self.init_thread.started.connect(lambda: self.init_func(opt))
             self.start_thread(self.init_thread)
         else:
+            # CLI mode - print welcome message and initialize directly
             print(
                 "\n\n***************************************"
                 + " Welcome to Machine Learning-Assisted Data Annotation (ML-ADA) *"
                 + "*************************************************\n"
             )
             self.init_func(opt)
-            # print(opt)
 
     def start_thread(self, thread):
+        """
+        Start a QThread if it's not already running.
+        
+        Args:
+            thread: QThread instance to start
+        """
         if thread.isFinished:
             thread.start()
 
     def subset_selection(self):
+        """
+        Select the next subset of unlabelled data for annotation.
+        
+        This method implements different selection strategies:
+        - Random selection
+        - Confidence-based selection (lowest confidence samples first)
+        
+        Returns:
+            Subset: Selected subset of unlabelled data
+        """
         self.model.eval()
         len_unlabelled_set = len(self.unlabelled_set)
         self.loop_iteration = int(
@@ -305,26 +402,33 @@ class MLADA(*inhertance_classes):
                 (self.len_total_dataset - len_unlabelled_set) / self.opt.subset_size
             )
         )
+        
+        # Check if all data has been annotated
         if self.loop_iteration == self.total_iterations:
             self.print_msg(
                 f"All the dataset is annotated!! The annotation files can be found in {os.path.join(self.opt.checkpoint_dir, 'total', 'label_2')}"
             )
             exit(0)
             return None
+            
         self.print_msg(
             f"Annotating the {make_ordinal(self.loop_iteration + 1)} subset of data from total {self.total_iterations} subsets ..."
         )
+        
         selection_size = min(len_unlabelled_set, self.opt.subset_size)
+        
+        # Handle resumption from previous session
         if self.loop_iteration == 0 and len(self.logger.selected_filenames) > 0:
             subset_indices = np.array(
                 [self.f2i[f] for f in self.logger.selected_filenames]
             )
         elif self.opt.query_mode == "random":
+            # Random selection strategy
             subset_indices = np.random.choice(
                 np.arange(len_unlabelled_set), selection_size, replace=False
             )
-
         elif self.opt.query_mode == "conf":
+            # Confidence-based selection - select samples with lowest confidence
             sample_scores = []
             dataloader = torch.utils.data.DataLoader(
                 self.unlabelled_set,
@@ -336,6 +440,8 @@ class MLADA(*inhertance_classes):
             if self.is_gui:
                 self.progressBar.show()
                 self.progressBar.setValue(0)
+                
+            # Compute confidence scores for all samples
             with torch.no_grad():
                 for batch_i, data_dict in enumerate(dataloader):
                     if self.is_gui:
@@ -345,7 +451,10 @@ class MLADA(*inhertance_classes):
                     sample_scores.extend(
                         self.model.get_bbox_scores(data_dict, self.classes_to_labels)
                     )
+            # Select samples with lowest confidence scores
             subset_indices = np.argsort(sample_scores)[:selection_size]
+            
+        # Sort indices by file path for consistent ordering
         if self.is_two_d:
             order_indx = np.argsort(
                 [self.unlabelled_set[i]["im_path"] for i in subset_indices]
@@ -355,6 +464,8 @@ class MLADA(*inhertance_classes):
                 [self.unlabelled_set[i]["lidar_path"] for i in subset_indices]
             )
         subset_indices = subset_indices[order_indx]
+        
+        # Create subset and update unlabelled set
         unlabelled_sub_dataset = Subset(self.unlabelled_set, subset_indices)
         remaining_indices = set(np.arange(len_unlabelled_set)).difference(
             subset_indices
@@ -363,10 +474,18 @@ class MLADA(*inhertance_classes):
         return unlabelled_sub_dataset
 
     def visualise_annotation(self, show_target=False):
+        """
+        Visualize model predictions and ground truth annotations.
+        
+        Args:
+            show_target: If True, also show ground truth annotations
+        """
         data_dict = self.unlabelled_set[0]
         img_path = data_dict["im_path"]
         img = data_dict["input_img"]
         target = data_dict["filled_labels"]
+        
+        # Run model inference
         self.model.eval()
         img = set_device(img, self.is_cuda).unsqueeze(axis=0)
         with torch.no_grad():
@@ -378,18 +497,31 @@ class MLADA(*inhertance_classes):
                 conf_thres=self.opt.conf_thres,
                 nms_thres=self.opt.nms_thres,
             )
+            
+        # Draw ground truth annotations if requested
         if show_target:
             output_ = convert_target_to_detection(target, self.opt.img_size)
             if output_ is not None:
                 draw_bbox(
                     img_path, output_, self.labels, self.opt.img_size, self.resize_tuple
                 )
+                
+        # Draw model predictions
         if output[0] is not None:
             draw_bbox(
                 img_path, output[0], self.labels, self.opt.img_size, self.resize_tuple
             )
 
     def pre_annotate(self, unlabelled_sub_dataset):
+        """
+        Generate pre-annotations for a subset of unlabelled data.
+        
+        Args:
+            unlabelled_sub_dataset: Subset of unlabelled data to annotate
+            
+        Returns:
+            list: List of model predictions for each sample
+        """
         data_loader = torch.utils.data.DataLoader(
             unlabelled_sub_dataset,
             batch_size=self.opt.batch_size,
@@ -399,8 +531,11 @@ class MLADA(*inhertance_classes):
         )
         self.model.eval()
         all_outputs = []
+        
         if self.is_gui:
             self.progressBar.show()
+            
+        # Process each batch and collect predictions
         for batch_i, data_dict in enumerate(data_loader):
             if self.is_gui:
                 self.progressBar.setValue(int(((batch_i + 1) / len(data_loader)) * 100))
@@ -411,9 +546,18 @@ class MLADA(*inhertance_classes):
         return all_outputs
 
     def evaluate(self, pre_annotation_list=None, tag="subset"):
+        """
+        Evaluate model performance on labelled data.
+        
+        Args:
+            pre_annotation_list: Optional list of pre-annotations to evaluate
+            tag: Evaluation tag for logging ("subset" or "validation")
+        """
         if tag != "subset":
             pre_annotation_list = None
         self.print_msg("\nEvaluation .....\n")
+        
+        # Load labelled dataset for evaluation
         labelled_sub_dataset = get_dataset(
             os.path.join(
                 self.opt.checkpoint_dir, "temp" if tag == "subset" else "total"
@@ -595,8 +739,15 @@ class MLADA(*inhertance_classes):
         return
 
     def fine_tune(self):
+        """
+        Orchestrate model fine-tuning process with optional background training.
+        
+        This method handles the training workflow, including background training
+        management and model updates after training completion.
+        """
         if self.do_training:
             if self.opt.background_training:
+                # Handle background training thread management
                 if self.training_thread is not None and self.training_thread.is_alive():
                     self.print_msg(
                         f"The training thread is still running (epoch {self.training_epoch} from {self.opt.epochs}), do you like to wait for training to be finished?"
@@ -606,6 +757,7 @@ class MLADA(*inhertance_classes):
                             "\n Type 'yes' for waiting  and 'no' for continue annotating with current model:\n"
                         )
                         if cmd == "yes":
+                            # Wait for training to complete
                             while self.training_thread.is_alive():
                                 time.sleep(1)
                                 self.print_msg(
@@ -620,12 +772,16 @@ class MLADA(*inhertance_classes):
                     self.training_thread is not None
                     and not self.training_thread.is_alive()
                 ):
+                    # Training completed, update model
                     self.training_thread.join()
                     self.model = set_device(self.training_model, self.is_cuda)
+                    
+                # Start new training thread
                 self.training_thread = threading.Thread(target=self.fine_tune_thread)
                 self.training_thread.start()
 
             else:
+                # Synchronous training
                 if self.training_model is not None:
                     self.model = set_device(self.training_model, self.is_cuda)
                 self.fine_tune_thread()
@@ -637,25 +793,42 @@ class MLADA(*inhertance_classes):
         return
 
     def check_performance(self):
+        """
+        Check if model performance meets the threshold to disable further training.
+        """
         if self.val_best_mAP > self.opt.performance_thres:
             self.do_training = False
 
     def export_annotation(self, dataset, pre_annotation_list):
+        """
+        Export pre-annotations to the appropriate format for annotation tools.
+        
+        Args:
+            dataset: Dataset containing the samples
+            pre_annotation_list: List of model predictions
+            
+        Returns:
+            dict: Formatted results for 3D annotations
+        """
         pre_label_dir = os.path.join(self.opt.checkpoint_dir, "temp", "pre_label_2")
         os.makedirs(pre_label_dir, exist_ok=True)
         format_results = {}
         calib_dict = {}
         frames = []
+        
+        # Process each sample and its predictions
         for ind, (data_dict, pre_annotation) in enumerate(
             zip(dataset, pre_annotation_list)
         ):
             if self.is_two_d:
+                # Handle 2D annotations
                 ret = write_annotations_2d(
                     ind, data_dict, pre_annotation, pre_label_dir, self.labels, self.opt
                 )
                 if self.opt.data_format == "openlabel":
                     frames.append(ret)
             else:
+                # Handle 3D annotations
                 data_dict = collate_fn_3d([data_dict])
                 format_result = format_annotations(
                     ind, data_dict, pre_annotation, self.labels
@@ -664,6 +837,7 @@ class MLADA(*inhertance_classes):
                 format_results[idx] = {k: np.array(v) for k, v in format_result.items()}
                 calib_dict[idx] = data_dict["batched_calib_info"][0]
 
+        # Export in appropriate format
         if self.is_two_d and self.opt.data_format == "openlabel":
             annotation_dict = {"openlabel": {"frames": frames}}
             with open(
@@ -679,17 +853,29 @@ class MLADA(*inhertance_classes):
             return format_results
 
     def refine_pre_labels(self, dataset):
+        """
+        Prepare pre-annotations for manual refinement in annotation tools.
+        
+        This method creates the necessary directory structure and files
+        for uploading to annotation tools like CVAT.
+        
+        Args:
+            dataset: Dataset containing the samples to be annotated
+        """
         def make_data_dir(folder, subfolder):
+            """Helper function to create directory structure."""
             dir_ = os.path.join(self.opt.checkpoint_dir, folder, subfolder)
             os.makedirs(dir_, exist_ok=True)
             return dir_
 
+        # Set up directory structure
         data_folder_name = "image_2" if self.is_two_d else self.velo_folder_name
         tmp_data_dir = make_data_dir("temp", data_folder_name)
         make_data_dir("temp", "label_2")
         gt_label_dir_t = make_data_dir("total", "label_2")
 
         if self.opt.data_format == "kitti":
+            # Copy data files to temporary directory
             for data_dict in dataset:
                 data_path = (
                     data_dict["im_path"]
@@ -697,7 +883,8 @@ class MLADA(*inhertance_classes):
                     else os.path.join(self.opt.data_dir, data_dict["lidar_path"])
                 )
                 shutil.copy(data_path, tmp_data_dir)
-            ## make subset.zip to be uploaded to the annotation tool
+                
+            # Create subset archive for annotation tool upload
             os.makedirs(os.path.join(self.opt.checkpoint_dir, "Subset"), exist_ok=True)
             if self.is_two_d:
                 shutil.copytree(
@@ -719,36 +906,16 @@ class MLADA(*inhertance_classes):
                     os.path.join(self.opt.checkpoint_dir, "temp", data_folder_name),
                     os.path.join(self.opt.checkpoint_dir, "Subset", data_folder_name),
                 )
+                
+            # Create zip archive and clean up
             shutil.make_archive(
                 os.path.join(self.opt.checkpoint_dir, "Subset"),
                 "zip",
                 os.path.join(self.opt.checkpoint_dir, "Subset"),
             )
             shutil.rmtree(os.path.join(self.opt.checkpoint_dir, "Subset"))
-            ############### TODO: remove this when on the last release ##################################################################
-            # ann_dict = {}
-            # calib_dict = {}
-            # for data_dict in dataset:
-            #     data_path = data_dict['im_path'] if self.is_two_d else os.path.join(self.opt.data_dir, data_dict['lidar_path'])
-            #     if not self.is_two_d:
-            #         id = int(data_path.split(os.path.sep)[-1].split('.')[0])
-            #         ann_dict[id] = read_label(data_path.replace(self.velo_folder_name, 'label_2').replace('bin', 'txt'))
-            #         calib_dict[id] = data_dict['calib_info']
-            #     else:
-            #         label_path = data_path.replace('image', 'label').replace('jpeg', 'txt') \
-            #             if self.is_two_d else data_path.replace(self.velo_folder_name, 'label_2').replace('bin', 'txt')
-            #         shutil.copy(label_path, gt_label_dir_t)
-            # if not self.is_two_d:
-            #     create_kitti_xml(os.path.join(gt_label_dir_t, 'tracklet_labels.xml'), ann_dict, calib_dict)
-
-            # os.makedirs(os.path.join(self.opt.checkpoint_dir,'Refined_Subset'), exist_ok=True)
-            # if self.is_two_d:
-            #     shutil.copytree(os.path.join(self.opt.checkpoint_dir, 'total', 'label_2'), os.path.join(self.opt.checkpoint_dir,'Refined_Subset', 'label_2'))
-            # else:
-            #     shutil.copy(os.path.join(gt_label_dir_t, 'tracklet_labels.xml'), os.path.join(self.opt.checkpoint_dir,'Refined_Subset'))
-            # shutil.make_archive(os.path.join(self.opt.checkpoint_dir, 'Refined_Subset'), 'zip', os.path.join(self.opt.checkpoint_dir,'Refined_Subset'))
-            # shutil.rmtree(os.path.join(self.opt.checkpoint_dir, 'Refined_Subset'))
-            ############### use tookit to manually refine the subset annotations #######################################################
+            
+            # Upload to annotation tool and start correction process
             if self.loop_iteration > 0 or len(self.logger.selected_filenames) == 0:
                 self.annotation_toolkit.upload_annotations()
             filenames = list(
@@ -763,8 +930,8 @@ class MLADA(*inhertance_classes):
             self.logger.update_selected(filenames)
             self.annotation_toolkit.correct_annotations()
 
-            ########################################################################################################################################
         elif self.is_two_d and self.opt.data_format == "openlabel":
+            # Handle OpenLabel format for 2D annotations
             os.makedirs(
                 os.path.join(self.opt.checkpoint_dir, "Subset", "images"), exist_ok=True
             )
@@ -783,23 +950,6 @@ class MLADA(*inhertance_classes):
                 os.path.join(self.opt.checkpoint_dir, "Subset"),
             )
             shutil.rmtree(os.path.join(self.opt.checkpoint_dir, "Subset"))
-            # with open(os.path.join(self.opt.data_dir, 'OL_annotation.json'), 'r') as f:
-            #     ann_dict = json.load(f)
-            #     frame_dict_list = ann_dict['openlabel']['frames']
-            #     new_frame_dict_list = []
-
-            # for img_path, _, _ in dataset:
-            #     shutil.copy(img_path, tmp_image_dir)
-            #     image_file_name = img_path.split(os.path.sep)[-1]
-            #     for frame_dict in frame_dict_list:
-            #         if frame_dict[list(frame_dict.keys())[0]]['file'] == image_file_name:
-            #             new_frame_dict_list.append(frame_dict)
-
-            # ann_dict['openlabel']['frames'] = new_frame_dict_list
-            # ## just for temps
-            # with open(os.path.join(gt_label_dir, 'OL_annotation.json'), 'w') as f:
-            #     json.dump(ann_dict, f)
-
             filenames = list(
                 map(
                     lambda l: l.split(os.path.sep)[-1].split(".")[0],
@@ -811,6 +961,7 @@ class MLADA(*inhertance_classes):
             self.annotation_toolkit.correct_annotations()
 
     def print_manual(self):
+        """Display available commands for CLI mode."""
         print_str = "\nPlease type the following commands:\n\n"
         print_str += "'ns' for annotating Next Subset.\n"
         print_str += "'vs' for Visualise Annotation.\n"
@@ -821,19 +972,34 @@ class MLADA(*inhertance_classes):
         print(print_str)
 
     def annotate_next_subset(self):
+        """
+        Execute the complete annotation workflow for the next subset.
+        
+        This is the main workflow method that:
+        1. Selects the next subset of unlabelled data
+        2. Generates pre-annotations
+        3. Exports annotations for manual refinement
+        4. Processes refined annotations
+        5. Evaluates model performance
+        6. Optionally fine-tunes the model
+        """
+        # Select next subset for annotation
         unlabelled_sub_dataset = self.subset_selection()
         if unlabelled_sub_dataset is None:
             if self.is_gui:
                 self.subset_selection_thread.quit()
             return
-        # Pre-Annotate ###############################
+            
+        # Generate pre-annotations using the current model
         pre_annotation_list = self.pre_annotate(unlabelled_sub_dataset)
         format_results = self.export_annotation(
             unlabelled_sub_dataset, pre_annotation_list
         )
         self.refine_pre_labels(unlabelled_sub_dataset)
-        ####################### Unzip refined labels ###############
+        
+        # Process refined annotations from annotation tool
         if self.opt.data_format == "kitti":
+            # Extract and process KITTI format annotations
             os.makedirs(os.path.join(self.opt.checkpoint_dir, "unzipped"))
             shutil.unpack_archive(
                 os.path.join(self.opt.checkpoint_dir, "Refined_Subset.zip"),
@@ -841,6 +1007,7 @@ class MLADA(*inhertance_classes):
                 "zip",
             )
             if not self.is_two_d:
+                # Convert XML to TXT for 3D annotations
                 os.makedirs(
                     os.path.join(self.opt.checkpoint_dir, "unzipped", "label_2"),
                     exist_ok=True,
@@ -850,6 +1017,8 @@ class MLADA(*inhertance_classes):
                     os.path.join(self.opt.checkpoint_dir, "unzipped", "label_2"),
                     self.opt.data_dir,
                 )
+                
+            # Find all label files
             if self.is_two_d:
                 label_fname_list = glob(
                     os.path.join(
@@ -861,7 +1030,7 @@ class MLADA(*inhertance_classes):
                     os.path.join(self.opt.checkpoint_dir, "unzipped", "**", "*.txt")
                 )
 
-            # print(label_fname_list)
+            # Copy processed annotations to appropriate directories
             flag_dict = {k: False for k in self.logger.selected_filenames}
             for f in label_fname_list:
                 k = f.split(os.path.sep)[-1].split(".")[0]
@@ -873,6 +1042,8 @@ class MLADA(*inhertance_classes):
                         f, os.path.join(self.opt.checkpoint_dir, "temp", "label_2")
                     )
                     flag_dict[k] = True
+                    
+            # Check for missing annotations
             missed_id_list = []
             for k, v in flag_dict.items():
                 if not v:
@@ -886,6 +1057,7 @@ class MLADA(*inhertance_classes):
                 )
 
         elif self.opt.data_format == "openlabel":
+            # Process OpenLabel format annotations
             with open(
                 os.path.join(
                     self.opt.checkpoint_dir, "Refined_Subset_OL_annotations.json"
@@ -894,6 +1066,8 @@ class MLADA(*inhertance_classes):
             ) as f:
                 refined_ann_dict = json.load(f)
                 new_frame_dict_list = refined_ann_dict["openlabel"]["frames"]
+                
+            # Merge with existing annotations if available
             if os.path.exists(
                 os.path.join(self.opt.checkpoint_dir, "total", "OL_annotation.json")
             ):
@@ -907,23 +1081,30 @@ class MLADA(*inhertance_classes):
                 total_ann_dict["openlabel"]["frames"].extend(new_frame_dict_list)
             else:
                 total_ann_dict = refined_ann_dict
+                
+            # Save merged annotations
             with open(
                 os.path.join(self.opt.checkpoint_dir, "total", "OL_annotation.json"),
                 "w",
             ) as f:
                 json.dump(total_ann_dict, f)
+                
+        # Evaluate model performance on the newly annotated subset
         if self.is_two_d:
             self.evaluate(pre_annotation_list=pre_annotation_list)
         else:
             self.evaluate(format_results)
 
+        # Fine-tune model if enabled
         do_rt = not self.checkBox.isChecked() if self.is_gui else not self.skip_rt
         if do_rt:
             self.fine_tune()
-        ## log the filnames labelled
+            
+        # Clean up and update logging
         shutil.rmtree(os.path.join(self.opt.checkpoint_dir, "temp"))
         self.logger.update_labelled()
         self.annotation_toolkit.destroy_annotation()
+        
         if self.is_gui:
             self.subset_selection_thread.quit()
             self.print_msg(
@@ -932,17 +1113,24 @@ class MLADA(*inhertance_classes):
         return
 
     def run_loop(self):
+        """
+        Main command loop for CLI mode.
+        
+        Handles user input and executes corresponding commands.
+        """
         self.print_manual()
         while True:
             cmd = input("ML-ADA>")
             if cmd == "ns":
                 self.annotate_next_subset()
             elif cmd == "vs":
-                # Visualise Detection ###########################
+                # Visualize current model predictions
                 self.visualise_annotation(show_target=True)
             elif cmd == "rt":
+                # Toggle re-training skip flag
                 self.skip_rt = not self.skip_rt
             elif cmd == "db":
+                # Toggle background training
                 self.opt.background_training = not self.opt.background_training
             elif cmd == "h":
                 self.print_manual()
@@ -952,10 +1140,23 @@ class MLADA(*inhertance_classes):
                 print("Command not recognised!")
 
     def receive_texbrowser_signal(self, msg):
+        """
+        Handle text browser signal for GUI mode.
+        
+        Args:
+            msg: Message to display in the text browser
+        """
         self.textBrowser.append(msg)
         self.textBrowser.repaint()
 
     def print_msg(self, msg, is_error=False):
+        """
+        Print message to appropriate output (GUI or console).
+        
+        Args:
+            msg: Message to print
+            is_error: Whether this is an error message
+        """
         if is_gui:
             if is_error:
                 show_msgbox(self, msg, "OK", "error", True)
@@ -965,6 +1166,13 @@ class MLADA(*inhertance_classes):
             print(msg + "\n")
 
     def exit_(self, code, msg=None):
+        """
+        Clean exit with proper cleanup.
+        
+        Args:
+            code: Exit code (0 for success, 1 for error)
+            msg: Optional error message
+        """
         if hasattr(self, "annotation_toolkit"):
             if self.annotation_toolkit.driver is not None:
                 self.annotation_toolkit.driver.close()
@@ -976,21 +1184,37 @@ class MLADA(*inhertance_classes):
             exit(0)
 
     def closeEvent(self, event):
+        """Handle GUI window close event."""
         self.exit_(0)
 
 
 def start_MLADA(config_window):
+    """
+    Start ML-ADA application with configuration from GUI.
+    
+    Args:
+        config_window: Configuration window containing experiment parameters
+    """
     mainwindow = MLADA(opt=config_window.get_all_variables())
 
 
 if __name__ == "__main__":
+    """
+    Main entry point for ML-ADA application.
+    
+    Supports both GUI and CLI modes:
+    - GUI mode: --gui flag launches configuration window
+    - CLI mode: --cfg <config_file> loads configuration from JSON file
+    """
     if is_gui:
+        # GUI mode - launch configuration window
         app = QApplication(sys.argv)
         config_window = ConfigUI()
         config_window.accepted.connect(lambda: start_MLADA(config_window))
         config_window.exec()
         sys.exit(app.exec())
     else:
+        # CLI mode - load configuration from file
         cfg_file_path = sys.argv[2]
         if os.path.exists(cfg_file_path):
             with open(cfg_file_path) as outfile:
